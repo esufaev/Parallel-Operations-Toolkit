@@ -67,7 +67,7 @@ namespace pot::experimental
         auto add_task(Func func, Args &&...args)
         {
             using Ret = decltype(func(args...));
-            auto task = std::make_shared<detail::Task<Ret>>(func, std::forward<Args>(args)...);
+            auto task = std::make_shared<details::Task<Ret>>(func, std::forward<Args>(args)...);
             {
                 std::unique_lock<std::mutex> lock(m_queue_mutex);
                 m_queue.push([task]()
