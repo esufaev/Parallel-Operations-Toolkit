@@ -9,70 +9,34 @@
 #include <unordered_set>
 #include <cassert>
 #include <functional>
-#include <any>
 
 namespace tools
 {
-
+    template <typename Ret>
     class Task
     {
     public:
-        template <typename Func, typename... Args, typename... FuncTypes>
-        Task(Func (*func)(FuncTypes...), Args &&...args) 
-            : m_is_void{std::is_void_v<Func>}
+        template <typename Func, typename... Args>
+        Task(Func func, Args &&...args)
         {
-            if constexpr (std::is_void_v<Func>)
-            {
-                m_void_func = std::bind(func, std::forward<Args>(args)...);
-                m_any_func = []() -> std::any { return {}; };
-            }
-            else
-            {
-                m_void_func = []() -> void {};
-                m_any_func = std::bind(func, std::forward<Args>(args)...);
-            }
-        }
-
-        void complete(std::any result)
-        {
-            m_promise.set_value(result);
-        }
-
-        void complete()
-        {
-            m_promise.set_value(std::any());
-        }
-
-        std::future<std::any> get_future()
-        {
-            return m_promise.get_future();
+            m_task = std::packaged_task<Ret()>([func, args...]()
+                                               { return func(args...); });
+            m_future = m_task.get_future();
         }
 
         void operator()()
         {
-            m_void_func();
-            m_any_func_result = m_any_func();
+            m_task();
         }
 
-        bool has_result() const
+        std::future<Ret> get_future()
         {
-            return !m_is_void;
-        }
-
-        std::any get_result() const
-        {
-            assert(!m_is_void);
-            assert(m_any_func_result.has_value());
-            return m_any_func_result;
+            return std::move(m_future);
         }
 
     private:
-        std::function<void()> m_void_func;
-        std::function<std::any()> m_any_func;
-        std::any m_any_func_result;
-        bool m_is_void;
-
-        std::promise<std::any> m_promise;
+        std::packaged_task<Ret()> m_task;
+        std::future<Ret> m_future;
     };
 
     class thread_pool_ol
@@ -102,26 +66,30 @@ namespace tools
             }
         }
 
-        template <typename Func, typename... Args, typename... FuncTypes>
-        Task &add_task(Func (*func)(FuncTypes...), Args &&...args)
+        template <typename Func, typename... Args>
+        auto add_task(Func func, Args &&...args)
         {
-            std::unique_lock<std::mutex> lock(m_queue_mutex);
-            auto task = std::make_shared<Task>(func, std::forward<Args>(args)...);
-            m_queue.push(task);
+            using Ret = decltype(func(args...));
+            auto task = std::make_shared<Task<Ret>>(func, std::forward<Args>(args)...);
+            {
+                std::unique_lock<std::mutex> lock(m_queue_mutex);
+                m_queue.push([task]()
+                             { (*task)(); });
+            }
             m_queue_cv.notify_one();
 
-            return *task;
+            return task->get_future();
         }
 
-        void wait(Task &task)
+        template <typename Future>
+        void wait(Future &future)
         {
-            auto future = task.get_future();
             future.wait();
         }
 
-        std::any wait_result(Task &task)
+        template <typename ResultType, typename Future>
+        ResultType wait_result(Future &future)
         {
-            auto future = task.get_future();
             return future.get();
         }
 
@@ -130,77 +98,64 @@ namespace tools
         {
             while (true)
             {
-                std::shared_ptr<Task> task;
-                
+                std::function<void()> task;
+
                 {
                     std::unique_lock<std::mutex> lock(m_queue_mutex);
-                    m_queue_cv.wait(lock, [this] { return m_stop || !m_queue.empty(); });
+                    m_queue_cv.wait(lock, [this]
+                                    { return m_stop || !m_queue.empty(); });
 
-                    if (m_stop && m_queue.empty()) return;
+                    if (m_stop && m_queue.empty())
+                        return;
 
-                    task = m_queue.front();
+                    task = std::move(m_queue.front());
                     m_queue.pop();
                 }
 
-                (*task)();
-                if (task->has_result())
-                {
-                    task->complete(task->get_result());
-                }
-                else
-                {
-                    task->complete();
-                }
+                task();
             }
         }
 
         std::vector<std::thread> m_threads;
-        std::queue<std::shared_ptr<Task>> m_queue;
+
+        std::queue<std::function<void()>> m_queue;
         std::mutex m_queue_mutex;
         std::condition_variable m_queue_cv;
+
         std::atomic<bool> m_stop;
     };
 }
 
-void sum(std::vector<int> vec, int num)
+std::mutex cout_mtx;
+void print(std::string mes, int i)
 {
-    int res = 0;
-    for (auto &el : vec)
-    {
-        res += el;
-        std::cout << "Func num " << num << ": " << el << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-    std::cout << "Func num " << num << " res: " << res << std::endl;
+    cout_mtx.lock();
+    std::cout << mes + " " << i << std::endl;
+    cout_mtx.unlock();
 }
 
-int sum2(std::vector<int> vec, int num)
+std::string ping(std::string str, int i)
 {
-    int res = 0;
-    for (auto &el : vec)
-    {
-        res += el;
-        std::cout << "Func num " << num << ": " << el << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-    std::cout << "Func num " << num << " res: " << res << std::endl;
-    return res;
+    std::string result = str + " " + std::to_string(i);
+    return result;
 }
+
 int main()
 {
-    tools::thread_pool_ol tp(3);
-    std::vector<int> s1 = {1, 3, 4, 5, 2, 3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 2, 1, 4, 3, 2, 4, 2, 3, 4, 2, 3, 3};
-    std::vector<int> s2 = {2, 1, 4, 3, 2, 4, 2, 3, 4};
-    std::vector<int> s3 = {6, 2, 1, 4, 3, 2, 4, 2, 3, 4, 2, 3, 3};
+    tools::thread_pool_ol tp(10);
+    for (int i = 0; i < 10; i++)
+    {
+        auto future = tp.add_task(print, "Task: ", i + 1);
+        tp.wait(future);
+    }
 
-    auto &id2 = tp.add_task(sum, s2, 2);
-    auto &id1 = tp.add_task(sum2, s1, 1);
-    // auto& id3 = tp.add_task(sum, s3, 3);
-
-    std::cout << "IIIIIIIIIIIIIIII" << std::endl;
-    // tp.wait(id2);
-    std::cout << "HTTUYGIJHGDJHSGFGJSDFSD: " << tp.wait_result(id1).has_value() << std::endl;
-    std::cout << "Task 2 completed successfully" << std::endl;
+    tools::thread_pool_ol tp1(10);
+    for (int i = 0; i < 10; i++)
+    {
+        auto future = tp1.add_task(ping, "Ping: ", i + 1);
+        std::string result = tp1.wait_result<std::string>(future);
+        std::cout << result << std::endl;
+    }
 
     return 0;
 }
