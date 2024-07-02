@@ -68,6 +68,7 @@ endif()
 
 set(POT_HEADERS
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_ol.h
+    include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_GQ_fpe.h
 )
 
 set(POT_SOURCES
