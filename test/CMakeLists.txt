@@ -5,6 +5,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 
 set(TEST_SOURCES
     test_pot.cpp
+    test_thread_pool_fpe.cpp
 )
 
 add_executable(tests ${TEST_SOURCES})
