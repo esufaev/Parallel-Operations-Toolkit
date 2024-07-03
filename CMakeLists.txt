@@ -18,52 +18,9 @@ option(POT_CHECK_WARNINGS    "Strict compiler checks" ON )
 # set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_definitions(_SILENCE_ALL_CXX23_DEPRECATION_WARNINGS)
 
-
-if((CMAKE_CXX_COMPILER_ID MATCHES "GNU") OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
-    add_compile_options(
-        -finput-charset=UTF-8
-        -fexec-charset=UTF-8
-        -std=c++2a
-        -mavx2
-        -fexceptions
-    )
-    if(POT_CHECK_WARNINGS)
-        add_compile_options(
-            -Werror
-
-            -Wall
-            -Wextra
-            -Wpedantic
-
-            -Wcast-align
-            -Wcast-qual
-            -Wconversion
-            -Wctor-dtor-privacy
-            -Wenum-compare
-            -Wfloat-equal
-            -Wnon-virtual-dtor
-            -Wold-style-cast
-            -Woverloaded-virtual
-            -Wredundant-decls
-            -Wsign-conversion
-            -Wsign-promo
-        )
-    endif()
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    add_compile_options(
-        /utf-8
-        /std:c++latest
-        /permissive-
-        /arch:AVX2
-        /EHsc
-    )
-    if(POT_CHECK_WARNINGS)
-        add_compile_options(
-            /W4
-            /WX
-        )
-    endif()
-endif()
+# Apply compiler flags
+include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
+apply_compiler_flags()
 
 
 set(POT_HEADERS
@@ -90,6 +47,8 @@ set_target_properties(
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS NO
 )
+# Apply warning flags
+apply_warning_flags_to_targets(pot)
 
 target_include_directories(${PROJECT_NAME}
         PUBLIC
