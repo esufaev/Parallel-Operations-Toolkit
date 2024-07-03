@@ -16,15 +16,12 @@ namespace pot::traits::guards
         constexpr ~guard_bool() { m_variable = !initial_value; }
     };
 
-    template<bool initial_value, typename BoolType>
-    guard_bool(BoolType&) -> guard_bool<initial_value, BoolType>;
+    // template<bool initial_value, typename BoolType>
+    // guard_bool(BoolType&) -> guard_bool<initial_value, BoolType>;
 
     template<bool initial_value, typename BoolType>
     constexpr auto make_guard_bool(BoolType& variable)
     {
         return guard_bool<initial_value, BoolType>(variable);
     }
-
-    // template<bool initial_value, typename BoolType>
-    // guard_bool(BoolType&, std::integral_constant<bool, initial_value>) -> guard_bool<initial_value, BoolType>;
 }
