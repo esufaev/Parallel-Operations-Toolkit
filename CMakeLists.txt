@@ -24,12 +24,14 @@ apply_compiler_flags()
 
 
 set(POT_HEADERS
+    include/${PROJECT_NAME}/pot_traits.h
+    include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_ol.h
-    include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_GQ_fpe.h
+    include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_fpe.h
 )
 
 set(POT_SOURCES
-    src/experimental/thread_pool/thread_pool_GQ_fpe.cpp
+    src/experimental/thread_pool/thread_pool_fpe.cpp
     # src/main.cpp
 )
 
