@@ -19,7 +19,6 @@ namespace pot::experimental::thread_pool
         void run_detached(std::mutex& mutex, std::condition_variable& condition, std::queue<TaskType>& tasks, Func&& func, Args&&...args)
             requires std::is_invocable_v<Func, Args...>
         {
-            using return_type = std::invoke_result_t<Func, Args...>;
 
             std::scoped_lock _(mutex);
             if constexpr (std::is_same_v<Func, TaskFunctionType>)
@@ -100,8 +99,10 @@ namespace pot::experimental::thread_pool
         {
             assert(thread_count);
             m_threads.resize(thread_count);
-            for (auto&& [idx, thread] : std::views::enumerate(m_threads))
+            for (auto idx = 0ull; idx < thread_count; ++idx)
             {
+                auto& thread = m_threads[idx];
+
                 if constexpr (global_queue_mode)
                 {
                     thread = std::make_unique<thread_fpe>(
@@ -239,7 +240,7 @@ namespace pot::experimental::thread_pool
 
         template<typename Func, typename...Args>
         void run_detached(Func&& func, Args&&...args)
-            requires !global_queue_mode && std::is_invocable_v<Func, Args...>
+            requires (!global_queue_mode && std::is_invocable_v<Func, Args...>)
         {
             details_fpe::run_detached<Task, typename Task::function_type, Func, Args...>(
                 m_mutex, m_condition, m_tasks,
@@ -248,7 +249,7 @@ namespace pot::experimental::thread_pool
 
         template<typename Func, typename...Args>
         auto run(Func&& func, Args&&...args) -> std::future<decltype(func(args...))>
-            requires !global_queue_mode && std::is_invocable_v<Func, Args...>
+            requires (!global_queue_mode && std::is_invocable_v<Func, Args...>)
         {
             return details_fpe::run<Task, typename Task::function_type, Func, Args...>(
                 m_mutex, m_condition, m_tasks,
@@ -261,7 +262,7 @@ namespace pot::experimental::thread_pool
             while (true)
             {
                 //traits::guards::guard_bool<false> gb(m_job_in_progress);
-                auto gb = traits::guards::make_guard_bool<false>(m_job_in_progress);
+                [[maybe_unused]] auto gb = traits::guards::make_guard_bool<false>(m_job_in_progress);
                 Task task;
                 {
                     std::unique_lock lock(m_mutex);
@@ -309,10 +310,10 @@ namespace pot::experimental::thread_pool
     };
 
     // thread pool with global queue
-    using thread_pool_gq_fpe = typename thread_pool_fpe<true>;
+    using thread_pool_gq_fpe = thread_pool_fpe<true>;
 
     // thread pool with local queue
-    using thread_pool_lq_fpe = typename thread_pool_fpe<false>;
+    using thread_pool_lq_fpe = thread_pool_fpe<false>;
 
 
     /*template<bool global_queue_mode>
