@@ -10,186 +10,196 @@
 #include <mutex>
 #include <condition_variable>
 
-namespace detail
+namespace pot::experimental
 {
-    class worker_thread
+    namespace details
     {
-    public:
-        worker_thread() : m_running(true)
+        class worker_thread
         {
-            m_worker_thread = std::thread(&worker_thread::run, this);
-        }
-
-        ~worker_thread()
-        {
-            stop();
-            if (m_worker_thread.joinable())
+        public:
+            worker_thread() : m_running(true)
             {
-                m_worker_thread.join();
+                m_worker_thread = std::thread(&worker_thread::run, this);
             }
-        }
 
-        template <typename Func>
-        auto add_task_thread(Func &&func)
-        {
-            using Ret = decltype(func());
-            auto task = std::make_shared<std::packaged_task<Ret()>>(std::forward<Func>(func));
-            auto future = task->get_future();
+            ~worker_thread()
             {
-                std::unique_lock<std::mutex> lock(m_queue_mutex);
-                m_task_queue.push([task]()
-                                  { (*task)(); });
-                m_condition.notify_one();
+                stop();
+                if (m_worker_thread.joinable())
+                {
+                    m_worker_thread.join();
+                }
             }
-            return future;
-        }
 
-        void stop()
-        {
+            template <typename Func>
+            auto add_task_thread(Func &&func)
             {
-                std::unique_lock<std::mutex> lock(m_queue_mutex);
-                m_running = false;
-            }
-            m_condition.notify_all();
-        }
-
-        size_t get_queue_size()
-        {
-            std::unique_lock<std::mutex> lock(m_queue_mutex);
-            return m_task_queue.size();
-        }
-
-        void set_other_workers(std::vector<worker_thread *> *other_workers)
-        {
-            m_other_workers = other_workers;
-        }
-
-    private:
-        void run()
-        {
-            while (true)
-            {
-                std::function<void()> task;
+                using Ret = decltype(func());
+                auto task = std::make_shared<std::packaged_task<Ret()>>(std::forward<Func>(func));
+                auto future = task->get_future();
                 {
                     std::unique_lock<std::mutex> lock(m_queue_mutex);
-                    m_condition.wait(lock, [this]()
-                                     { return !m_task_queue.empty() || !m_running; });
-
-                    if (!m_running && m_task_queue.empty())
-                        return;
-
-                    if (!m_task_queue.empty())
-                    {
-                        task = std::move(m_task_queue.front());
-                        m_task_queue.pop();
-                    }
+                    m_task_queue.push([task]()
+                                      { (*task)(); });
+                    m_condition.notify_one();
                 }
+                return future;
+            }
 
-                if (task)
+            void stop()
+            {
                 {
-                    task();
+                    std::unique_lock<std::mutex> lock(m_queue_mutex);
+                    m_running = false;
                 }
-
-                if (!m_task_queue.empty())
-                {
-                    if (auto task = steal_task())
-                        task();
-                }
-            }
-        }
-
-        std::function<void()> steal_task()
-        {
-            for (auto worker : *m_other_workers)
-            {
-                if (worker == this)
-                    continue;
-
-                std::unique_lock<std::mutex> lock(worker->m_queue_mutex);
-                if (!worker->m_task_queue.empty())
-                {
-                    auto task = std::move(worker->m_task_queue.front());
-                    worker->m_task_queue.pop();
-                    return task;
-                }
-            }
-            return nullptr;
-        }
-
-        std::queue<std::function<void()>> m_task_queue;
-        std::mutex m_queue_mutex;
-        std::condition_variable m_condition;
-
-        std::thread m_worker_thread;
-        std::atomic<bool> m_running;
-        std::vector<worker_thread *> *m_other_workers;
-    };
-} // namespace detail
-
-namespace thread_pool
-{
-    using worker_thread = detail::worker_thread;
-
-    class thread_pool
-    {
-    public:
-        thread_pool(size_t numThreads) : m_next_worker(0)
-        {
-            for (size_t i = 0; i < numThreads; i++)
-            {
-                m_workers.push_back(std::make_shared<worker_thread>());
+                m_condition.notify_all();
             }
 
-            for (auto &worker : m_workers)
-            {
-                worker->set_other_workers(&m_raw_workers);
-                m_raw_workers.push_back(worker.get());
-            }
-        }
-
-        ~thread_pool()
-        {
-            for (auto &worker : m_workers)
-            {
-                worker->stop();
-            }
-        }
-
-        template <typename Func, typename... Args>
-        auto add_task(Func &&func, Args &&...args) -> std::future<decltype(func(args...))>
-        {
-            using Ret = decltype(func(args...));
-            auto task = std::make_shared<std::packaged_task<Ret()>>(std::bind(std::forward<Func>(func),
-                                                                              std::forward<Args>(args)...));
-            auto future = task->get_future();
-
-            size_t selected_worker_index = m_next_worker++ % m_workers.size();
-            auto selected_worker = m_workers[selected_worker_index].get();
-
+            size_t get_queue_size()
             {
                 std::unique_lock<std::mutex> lock(m_queue_mutex);
-                selected_worker->add_task_thread([task]()
-                                                 { (*task)(); });
+                return m_task_queue.size();
             }
 
-            return future;
-        }
+            void set_other_workers(std::vector<worker_thread *> *other_workers)
+            {
+                m_other_workers = other_workers;
+            }
 
-        void wait(std::future<void> &future)
+        private:
+            void run()
+            {
+                while (true)
+                {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(m_queue_mutex);
+                        m_condition.wait(lock, [this]()
+                                         { return !m_task_queue.empty() || !m_running; });
+
+                        if (!m_running && m_task_queue.empty())
+                            return;
+
+                        if (!m_task_queue.empty())
+                        {
+                            task = std::move(m_task_queue.front());
+                            m_task_queue.pop();
+                        }
+                    }
+
+                    task();
+
+                    if (m_task_queue.empty())
+                    {
+                        auto task = steal_task();
+                        if (task)
+                        {
+                            task();
+                        }
+                    }
+                }
+            }
+
+            std::function<void()> steal_task()
+            {
+                for (auto worker : *m_other_workers)
+                {
+                    if (worker == this)
+                        continue;
+
+                    std::unique_lock<std::mutex> lock(worker->m_queue_mutex);
+                    if (!worker->m_task_queue.empty())
+                    {
+                        auto task = std::move(worker->m_task_queue.front());
+                        worker->m_task_queue.pop();
+                        return task;
+                    }
+                }
+                return nullptr;
+            }
+
+            std::queue<std::function<void()>> m_task_queue;
+            std::mutex m_queue_mutex;
+            std::condition_variable m_condition;
+
+            std::thread m_worker_thread;
+            std::atomic<bool> m_running;
+            std::vector<worker_thread *> *m_other_workers;
+        };
+    } // namespace details
+
+    namespace thread_pool
+    {
+        using worker_thread = details::worker_thread;
+
+        class thread_pool
         {
-            future.wait();
-        }
+        public:
+            explicit thread_pool(size_t numThreads) : m_next_worker(0)
+            {
+                m_workers.reserve(numThreads);
+                for (size_t i = 0; i < numThreads; i++)
+                {
+                    m_workers.push_back(std::make_unique<worker_thread>());
+                }
 
-        template <typename T>
-        T wait_result(std::future<T> &future)
-        {
-            return future.get();
-        }
+                for (auto &worker : m_workers)
+                {
+                    worker->set_other_workers(&m_raw_workers);
+                    m_raw_workers.push_back(worker.get());
+                }
+            }
 
-    private:
-        std::vector<std::shared_ptr<worker_thread>> m_workers;
-        std::vector<worker_thread *> m_raw_workers;
-        std::atomic<size_t> m_next_worker;
-        std::mutex m_queue_mutex;
-    };
-} // namespace thread_pool
+            thread_pool(const thread_pool &) = delete;
+            thread_pool &operator=(const thread_pool &) = delete;
+            thread_pool(thread_pool &&other) = delete;
+            thread_pool &operator=(thread_pool &&other) = delete;
+
+            ~thread_pool()
+            {
+                for (auto &worker : m_workers)
+                {
+                    worker->stop();
+                }
+            }
+
+            template <typename Func, typename... Args>
+            auto add_task(Func &&func, Args &&...args) -> std::future<decltype(func(args...))>
+            {
+                using Ret = decltype(func(args...));
+                auto task = std::make_shared<std::packaged_task<Ret()>>(std::bind(std::forward<Func>(func),
+                                                                                  std::forward<Args>(args)...));
+                auto future = task->get_future();
+
+                size_t selected_worker_index = m_next_worker++ % m_workers.size();
+                auto selected_worker = m_workers[selected_worker_index].get();
+
+                {
+                    std::unique_lock<std::mutex> lock(m_queue_mutex);
+                    selected_worker->add_task_thread([task]()
+                                                     { (*task)(); });
+                }
+
+                return future;
+            }
+
+            void wait(std::future<void> &future)
+            {
+                future.wait();
+            }
+
+            template <typename T>
+            T wait_result(std::future<T> &future)
+            {
+                return future.get();
+            }
+
+        private:
+            std::vector<std::unique_ptr<worker_thread>> m_workers;
+            std::vector<worker_thread *> m_raw_workers;
+            std::atomic<size_t> m_next_worker;
+            std::mutex m_queue_mutex;
+        };
+    } // namespace thread_pool
+
+} // namespace pot::experimental
