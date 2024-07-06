@@ -82,13 +82,14 @@ namespace bench
         {
             if (PlotType)
             {
-                gp.send_line("set xlabel 'Number of tasks'");
+                gp.send_line("set xlabel 'Time (ms)'");
+                gp.send_line("set ylabel 'Number of tasks'");
             }
             else
             {
-                gp.send_line("set xlabel 'Threads'");
+                gp.send_line("set xlabel 'Time (ms)'");
+                gp.send_line("set ylabel 'Threads'");
             }
-            gp.send_line("set ylabel 'Time'");
             gp.send_line("plot '-' with linespoints");
 
             for (const auto &point : points)
