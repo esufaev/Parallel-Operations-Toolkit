@@ -3,7 +3,7 @@
 #include <future>
 #include <chrono>
 #include "../include/pot/experimental/thread_pool/bench.h"
-#include "../include/pot/experimental/thread_pool/thread_pool_ll.h"
+#include "../include/pot/experimental/thread_pool/thread_pool_lq_esu.h"
 
 using namespace std::chrono;
 
@@ -26,7 +26,7 @@ void run_benchmark_esu()
 
     for (int num_threads : thread_counts)
     {
-        pot::experimental::thread_pool::thread_pool pool(num_threads);
+        pot::experimental::thread_pool::thread_pool_lq_esu pool(num_threads);
 
         auto start_time = high_resolution_clock::now();
 
@@ -52,7 +52,7 @@ void run_benchmark_esu()
 
     for (int num_tasks : task_counts)
     {
-        pot::experimental::thread_pool::thread_pool pool(max_threads);
+        pot::experimental::thread_pool::thread_pool_lq_esu pool(max_threads);
 
         auto start_time = high_resolution_clock::now();
 
