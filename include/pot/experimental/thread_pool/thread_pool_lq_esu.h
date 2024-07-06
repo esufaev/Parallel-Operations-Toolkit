@@ -8,7 +8,7 @@
 #include <functional>
 #include <atomic>
 #include <mutex>
-#include <condition_variable>xc
+#include <condition_variable>
 
 namespace pot::experimental
 {
@@ -132,10 +132,10 @@ namespace pot::experimental
     {
         using worker_thread = details::worker_thread;
 
-        class thread_pool
+        class thread_pool_lq_esu
         {
         public:
-            explicit thread_pool(size_t numThreads) : m_next_worker(0)
+            explicit thread_pool_lq_esu(size_t numThreads) : m_next_worker(0)
             {
                 m_workers.reserve(numThreads);
                 for (size_t i = 0; i < numThreads; i++)
@@ -150,12 +150,12 @@ namespace pot::experimental
                 }
             }
 
-            thread_pool(const thread_pool &) = delete;
-            thread_pool &operator=(const thread_pool &) = delete;
-            thread_pool(thread_pool &&other) = delete;
-            thread_pool &operator=(thread_pool &&other) = delete;
+            thread_pool_lq_esu(const thread_pool_lq_esu &) = delete;
+            thread_pool_lq_esu &operator=(const thread_pool_lq_esu &) = delete;
+            thread_pool_lq_esu(thread_pool_lq_esu &&other) = delete;
+            thread_pool_lq_esu &operator=(thread_pool_lq_esu &&other) = delete;
 
-            ~thread_pool()
+            ~thread_pool_lq_esu()
             {
                 for (auto &worker : m_workers)
                 {
