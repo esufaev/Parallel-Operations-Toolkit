@@ -1,7 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
-#include "pot/experimental/thread_pool/thread_pool_ol.h"
+#include "pot/experimental/thread_pool/thread_pool_gq_esu.h"
 
 void printer(const std::string& str)
 {
