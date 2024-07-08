@@ -20,7 +20,7 @@ namespace pot::experimental
     */
     template<int64_t static_chunk_size = -1, typename IndexType, typename FuncType = void(IndexType), bool mode = true>
     void parfor(thread_pool::thread_pool_fpe<mode>& executor, IndexType from, IndexType to, FuncType&& func)
-        requires std::invocable<FuncType, IndexType>&& requires (thread_pool::thread_pool_fpe<mode>& executor) {{ executor.run };}
+        requires std::invocable<FuncType, IndexType>
     {
         assert(from < to);
 
