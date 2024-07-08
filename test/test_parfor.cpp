@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <ranges>
+
 #include "pot/experimental/parfor.h"
 #include "pot/utils/time_it.h"
 
