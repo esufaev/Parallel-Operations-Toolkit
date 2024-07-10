@@ -26,8 +26,13 @@ apply_compiler_flags()
 set(POT_HEADERS
     include/${PROJECT_NAME}/pot_traits.h
     include/${PROJECT_NAME}/when_all.h
+    include/${PROJECT_NAME}/executor.h
+
     include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/utils/time_it.h
+
+    include/${PROJECT_NAME}/executors/inline_executor.h
+
     include/${PROJECT_NAME}/experimental/parfor.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_gq_esu.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_lq_esu.h
@@ -35,6 +40,8 @@ set(POT_HEADERS
 )
 
 set(POT_SOURCES
+    src/executors/inline_executor.cpp
+
     src/experimental/thread_pool/thread_pool_fpe.cpp
     # src/main.cpp
 )

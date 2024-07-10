@@ -4,6 +4,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 # Create test executable
 
 set(TEST_SOURCES
+    test_inline_executor.cpp
     test_parfor.cpp
     test_pot.cpp
     test_thread_pool_fpe.cpp
