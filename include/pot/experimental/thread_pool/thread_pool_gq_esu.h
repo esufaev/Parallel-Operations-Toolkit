@@ -92,6 +92,11 @@ namespace pot::experimental
                 return future.get();
             }
 
+            size_t thread_count()
+            {
+                return m_threads.size();
+            }
+
         private:
             void run()
             {

@@ -1,140 +1,134 @@
-#include <iostream>
-#include <vector>
-#include <future>
+#include <cinttypes>
+#include <utility>
 #include <chrono>
+#include <future>
+#include <vector>
+#include <algorithm>
+#include <iostream>
+#include <fstream>
 #include <string>
-#include <map>
-#include "../include/pot/experimental/bench/bench.h"
-#include "../include/pot/experimental/thread_pool/thread_pool_lq_esu.h"
+#include <thread>
+
 #include "../include/pot/experimental/thread_pool/thread_pool_gq_esu.h"
+#include "../include/pot/experimental/thread_pool/thread_pool_lq_esu.h"
+
+namespace pot::experimental
+{
+    template <typename DurationType, typename IterationCleanUpCallback, typename Func, typename... Args>
+    DurationType time_it(size_t n, IterationCleanUpCallback &&callback, Func &&func, Args &&...args)
+    {
+        using clock_type = std::chrono::high_resolution_clock;
+
+        clock_type::duration total_duration{0};
+
+        for (size_t i = 0; i < n; ++i)
+        {
+            const auto start = clock_type::now();
+            func(std::forward<Args>(args)...);
+            const auto end = clock_type::now();
+            total_duration += end - start;
+
+            callback();
+        }
+
+        return std::chrono::duration_cast<DurationType>(total_duration / n);
+    }
+
+    template <int64_t static_chunk_size = -1, typename Executor, typename FuncType>
+    void parfor(Executor &executor, int from, int to, FuncType &&func)
+    {
+        if (from >= to)
+            return;
+
+        const int64_t numIterations = to - from;
+        int chunk_size = (static_chunk_size < 0) ? std::max(1ull, static_cast<unsigned long long int>(numIterations) / executor.thread_count()) : static_chunk_size;
+        const int64_t numChunks = (numIterations + chunk_size - 1) / chunk_size;
+
+        std::vector<std::future<void>> results;
+        results.reserve(numChunks);
+
+        for (int64_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex)
+        {
+            const int chunkStart = from + static_cast<int>(chunkIndex * chunk_size);
+            const int chunkEnd = std::min(chunkStart + chunk_size, to);
+
+            results.emplace_back(executor.add_task([start = chunkStart, end = chunkEnd, &func]
+                                                   {
+                for (int i = start; i < end; ++i)
+                {
+                    func(i);
+                } }));
+        }
+
+        for (auto &result : results)
+        {
+            result.wait();
+        }
+    }
+} // namespace pot::experimental
 
 using namespace std::chrono;
 
-void task_1()
+template <typename QueueMode>
+unsigned int task_1(int num_threads)
 {
-    auto result = 1ull;
-    for (auto i = 0ull; i < 14000000; i++) // Depends on the computer
-        result *= i;
+    constexpr auto vec_size = 1000000;
+    constexpr auto experiment_count = 2;
+
+    QueueMode pool(num_threads);
+
+    std::vector<double> vec_a(vec_size, 1.0);
+    std::vector<double> vec_b(vec_size, 2.0);
+    std::vector<double> vec_c(vec_size);
+
+    auto clear_c = [&vec_c]
+    { std::fill(vec_c.begin(), vec_c.end(), 0.0); };
+
+    clear_c();
+
+    auto duration = pot::experimental::time_it<milliseconds>(experiment_count, [] {}, [&]
+                                                             { pot::experimental::parfor(pool, 0, vec_a.size(), [&](const int i)
+                                                                                         { vec_c[i] = vec_a[i] + vec_b[i]; }); });
+
+    return duration.count();
 }
 
-void run_benchmark_esu()
+void run_benchmark(const int numThreads = std::thread::hardware_concurrency())
 {
-    const int num_tasks = 800;
-    std::vector<int> thread_counts = {4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32};
-    std::vector<int> task_counts = {100, 200, 400, 800, 1000, 1200, 1400}; // Depends on the computer
-    const int max_threads = 16;
+    const int numIterations = 10;
 
-    bench::graph graph_threads;
-    bench::graph graph_tasks;
+    std::ofstream output_file("benchmark_results.dat", std::ios::binary);
 
-    // Benchmark for thread_pool_lq_esu
+    for (bool is_lq : {true, false})
     {
-        for (int num_threads : thread_counts)
+        for (int num_threads = 1; num_threads <= numThreads; num_threads++)
         {
-            pot::experimental::thread_pool::thread_pool_lq_esu pool(num_threads);
-
-            auto start_time = high_resolution_clock::now();
-
-            std::vector<std::future<void>> futures;
-            for (int i = 0; i < num_tasks; ++i)
+            double total_duration = 0;
+            for (int i = 0; i < numIterations; ++i)
             {
-                futures.push_back(pool.add_task(task_1));
+                if (is_lq)
+                {
+                    total_duration += task_1<pot::experimental::thread_pool::thread_pool_lq_esu>(num_threads);
+                }
+                else
+                {
+                    total_duration += task_1<pot::experimental::thread_pool::thread_pool_gq_esu>(num_threads);
+                }
             }
+            double avg_duration = total_duration / numIterations;
 
-            for (auto &f : futures)
-            {
-                f.wait();
-            }
+            std::string type = is_lq ? "LQ" : "GQ";
+            std::cout << type << " Threads: " << num_threads << ", Avg Time: " << avg_duration << " ms" << std::endl;
 
-            auto end_time = high_resolution_clock::now();
-            double duration = duration_cast<milliseconds>(end_time - start_time).count();
-
-            std::cout << "LQ Threads: " << num_threads << ", Time: " << duration << " ms" << std::endl;
-            graph_threads.add_point("LQ", duration, num_threads);
-        }
-
-        for (int num_tasks : task_counts)
-        {
-            pot::experimental::thread_pool::thread_pool_lq_esu pool(max_threads);
-
-            auto start_time = high_resolution_clock::now();
-
-            std::vector<std::future<void>> futures;
-            for (int i = 0; i < num_tasks; ++i)
-            {
-                futures.push_back(pool.add_task(task_1));
-            }
-
-            for (auto &f : futures)
-            {
-                f.wait();
-            }
-
-            auto end_time = high_resolution_clock::now();
-            double duration = duration_cast<milliseconds>(end_time - start_time).count();
-
-            std::cout << "LQ Tasks: " << num_tasks << ", Time: " << duration << " ms" << std::endl;
-            graph_tasks.add_point("LQ", duration, num_tasks);
+            output_file.write(reinterpret_cast<const char *>(&num_threads), sizeof(num_threads));
+            output_file.write(reinterpret_cast<const char *>(&avg_duration), sizeof(avg_duration));
+            output_file.write(type.c_str(), type.size() + 1);
         }
     }
-
-    // Benchmark for thread_pool_gq_esu
-    {
-        for (int num_threads : thread_counts)
-        {
-            pot::experimental::thread_pool::thread_pool_gq_esu pool(num_threads);
-
-            auto start_time = high_resolution_clock::now();
-
-            std::vector<std::future<void>> futures;
-            for (int i = 0; i < num_tasks; ++i)
-            {
-                futures.push_back(pool.add_task(task_1));
-            }
-
-            for (auto &f : futures)
-            {
-                f.wait();
-            }
-
-            auto end_time = high_resolution_clock::now();
-            double duration = duration_cast<milliseconds>(end_time - start_time).count();
-
-            std::cout << "GQ Threads: " << num_threads << ", Time: " << duration << " ms" << std::endl;
-            graph_threads.add_point("GQ", duration, num_threads);
-        }
-
-        for (int num_tasks : task_counts)
-        {
-            pot::experimental::thread_pool::thread_pool_gq_esu pool(max_threads);
-
-            auto start_time = high_resolution_clock::now();
-
-            std::vector<std::future<void>> futures;
-            for (int i = 0; i < num_tasks; ++i)
-            {
-                futures.push_back(pool.add_task(task_1));
-            }
-
-            for (auto &f : futures)
-            {
-                f.wait();
-            }
-
-            auto end_time = high_resolution_clock::now();
-            double duration = duration_cast<milliseconds>(end_time - start_time).count();
-
-            std::cout << "GQ Tasks: " << num_tasks << ", Time: " << duration << " ms" << std::endl;
-            graph_tasks.add_point("GQ", duration, num_tasks);
-        }
-    }
-
-    graph_threads.plot();
-    graph_tasks.plot();
 }
 
 int main()
 {
-    run_benchmark_esu();
+    run_benchmark();
     return 0;
 }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <queue>
 #include <future>
@@ -192,6 +194,11 @@ namespace pot::experimental
             T wait_result(std::future<T> &future)
             {
                 return future.get();
+            }
+
+            size_t thread_count()
+            {
+                return m_workers.size();
             }
 
         private:
