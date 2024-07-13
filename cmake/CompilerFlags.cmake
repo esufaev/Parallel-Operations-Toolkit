@@ -4,7 +4,7 @@
 set(GNU_CLANG_FLAGS
     -finput-charset=UTF-8
     -fexec-charset=UTF-8
-    -std=c++2a
+    #-std=c++2a
     -mavx2
     -fexceptions
 )
@@ -31,7 +31,7 @@ set(GNU_CLANG_WARNING_FLAGS
 # MSVC flags
 set(MSVC_FLAGS
     /utf-8
-    /std:c++latest
+    #/std:c++latest
     /permissive-
     /arch:AVX2
     /EHsc

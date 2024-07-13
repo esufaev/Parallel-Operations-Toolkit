@@ -56,10 +56,11 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 set_target_properties(
     ${PROJECT_NAME}
       PROPERTIES
-        CXX_STANDARD 23
+        #CXX_STANDARD 20
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS NO
 )
+target_compile_features(pot PUBLIC cxx_std_20)
 # Apply warning flags
 apply_warning_flags_to_targets(pot)
 
