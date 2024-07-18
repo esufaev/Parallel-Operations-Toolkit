@@ -1,3 +1,5 @@
+#include <cinttypes>
+
 #include <catch2/catch_all.hpp>
 
 #include "pot/when_all.h"
@@ -66,9 +68,9 @@ TEST_CASE("pot::executors::bench_thread_pool_executor")
             constexpr int64_t test_count = 1000;
             const auto [time_local, time_global] = bench_thread_pool_lg<std::chrono::nanoseconds>(test_count, thread_count, vec_size);
 
-            printf("%*lld\t", column_width, thread_count);
-            printf("%*lld\t", column_width, time_local.count());
-            printf("%*lld\n", column_width, time_global.count());
+            printf("%*" PRId64 "\t", column_width, thread_count);
+            printf("%*" PRId64 "\t", column_width, time_local.count());
+            printf("%*" PRId64 "\n", column_width, time_global.count());
         } // for thread_count
     } // for vec_size
 
