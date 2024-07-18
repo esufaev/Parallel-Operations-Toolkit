@@ -94,6 +94,9 @@ public:
         }
     }
 
+
+    [[nodiscard]] size_t thread_count() const { return m_threads.size(); }
+
 protected:
     void derived_execute(std::function<void()> func) override
     {
