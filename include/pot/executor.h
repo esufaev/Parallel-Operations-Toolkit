@@ -2,6 +2,8 @@
 
 #include <string>
 #include <future>
+#include <functional>
+
 
 namespace pot
 {
