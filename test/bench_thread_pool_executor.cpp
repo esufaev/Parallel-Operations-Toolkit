@@ -23,7 +23,7 @@ std::pair<ChronoType, ChronoType> bench_thread_pool_lg(const int64_t test_count,
 
     clear_c();
 
-    const int64_t chunk_size = std::max(1ll, (vec_size + 1) / thread_count);
+    const int64_t chunk_size = std::max(static_cast<int64_t>(1), (vec_size + 1) / thread_count);
     const int64_t numChunks = (vec_size + chunk_size - 1) / chunk_size;
 
     std::vector<std::future<void>> results;
@@ -57,7 +57,7 @@ TEST_CASE("pot::executors::bench_thread_pool_executor")
     {
         constexpr auto column_width = 10;
 
-        printf("\n\nvec_size = %lld\n\n", vec_size);
+        printf("\n\nvec_size = %" PRId64 "\n\n", vec_size);
 
         printf("%*s\t", column_width, "threads");
         printf("%*s\t", column_width, "local"  );
