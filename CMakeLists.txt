@@ -27,6 +27,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/pot_traits.h
     include/${PROJECT_NAME}/when_all.h
     include/${PROJECT_NAME}/executor.h
+    include/${PROJECT_NAME}/platform.h
 
     include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/utils/time_it.h
