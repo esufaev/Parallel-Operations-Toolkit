@@ -4,7 +4,7 @@
 set(GNU_CLANG_FLAGS
     -finput-charset=UTF-8
     -fexec-charset=UTF-8
-    #-std=c++2a
+    -std=c++23
     -mavx2
     -fexceptions
 )
