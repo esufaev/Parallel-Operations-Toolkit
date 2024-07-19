@@ -10,8 +10,8 @@
 template<typename ChronoType>
 std::pair<ChronoType, ChronoType> bench_thread_pool_lg(const int64_t test_count, const int64_t thread_count, const int64_t vec_size)
 {
-    pot::executors::thread_pool_executor<true> executor_local ("thread_pool local", thread_count);
-    pot::executors::thread_pool_executor<true> executor_global("thread_pool global", thread_count);
+    pot::executors::thread_pool_executor_lq executor_local ("thread_pool local", thread_count);
+    pot::executors::thread_pool_executor_gq executor_global("thread_pool global", thread_count);
 
     std::vector<double> vec_a(vec_size);
     std::vector<double> vec_b(vec_size);
