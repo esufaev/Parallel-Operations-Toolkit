@@ -4,7 +4,7 @@
 
 namespace pot
 {
-    class global_thread : public thread
+    class global_thread final : public thread
     {
     public:
         explicit global_thread(std::mutex &m, std::condition_variable &cv,

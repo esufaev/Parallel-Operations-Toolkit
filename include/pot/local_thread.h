@@ -4,7 +4,7 @@
 
 namespace pot
 {
-    class local_thread : public thread
+    class local_thread final : public thread
     {
     public:
         explicit local_thread(const size_t id = 0, std::string thread_name = {})

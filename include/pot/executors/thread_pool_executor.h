@@ -12,7 +12,7 @@
 namespace pot::executors
 {
     template <bool global_queue_mode>
-    class thread_pool_executor : public executor
+    class thread_pool_executor final : public executor
     {
     public:
         struct empty_type {};
