@@ -30,10 +30,11 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/platform.h
     include/${PROJECT_NAME}/future.h
     include/${PROJECT_NAME}/promise.h
-    include/${PROJECT_NAME}/progress.h
+    include/${PROJECT_NAME}/this_thread.h
 
     include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/utils/time_it.h
+    include/${PROJECT_NAME}/utils/progress.h
 
     include/${PROJECT_NAME}/executors/inline_executor.h
 

@@ -1,13 +1,12 @@
 #pragma once
 
-#include <mutex>
-#include <condition_variable>
-#include <functional>
+#include <atomic>
 #include <memory>
 #include <exception>
 #include <stdexcept>
 #include <chrono>
-#include <iostream>
+
+#include "pot/this_thread.h"
 
 namespace pot
 {
@@ -21,26 +20,33 @@ namespace pot
     class shared_state
     {
     public:
-        explicit shared_state() : m_ready(false), m_value{} {}
+        shared_state() : m_ready(false), m_value(nullptr) {}
 
         void set_value(const T &value)
         {
-            std::lock_guard<std::mutex> lock(m_mtx);
-            if (m_ready)
+            auto tmp_value = std::make_shared<T>(value);
+            bool expected = false;
+            if (m_ready.compare_exchange_strong(expected, true, std::memory_order_release))
+            {
+                m_value.store(tmp_value, std::memory_order_release);
+            }
+            else
+            {
                 throw std::runtime_error("Value already set!");
-            m_value = value;
-            m_ready = true;
-            m_cv.notify_all();
+            }
         }
 
         void set_exception(std::exception_ptr eptr)
         {
-            std::lock_guard<std::mutex> lock(m_mtx);
-            if (m_ready)
+            bool expected = false;
+            if (m_ready.compare_exchange_strong(expected, true, std::memory_order_release))
+            {
+                m_eptr = eptr;
+            }
+            else 
+            {
                 throw std::runtime_error("Exception already set!");
-            m_eptr = eptr;
-            m_ready = true;
-            m_cv.notify_all();
+            }
         }
 
         T get()
@@ -50,40 +56,42 @@ namespace pot
             {
                 std::rethrow_exception(m_eptr);
             }
-            return m_value;
+            return *(m_value.load(std::memory_order_acquire));
         }
 
         void wait()
         {
-            std::unique_lock<std::mutex> lock(m_mtx);
-            m_cv.wait(lock, [this]
-                      { return m_ready; });
+            while (!m_ready.load(std::memory_order_acquire))
+            {
+                pot::this_thread::yield();
+            }
         }
 
         template <typename Rep, typename Period>
         bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
-            std::unique_lock<std::mutex> lock(m_mtx);
-            return m_cv.wait_for(lock, timeout_duration, [this]
-                                 { return m_ready; });
+            auto start_time = std::chrono::steady_clock::now();
+            while (!m_ready.load(std::memory_order_acquire))
+            {
+                if (std::chrono::steady_clock::now() - start_time > timeout_duration)
+                {
+                    return false;
+                }
+                pot::this_thread::yield();
+            }
+            return true;
         }
 
         template <typename Clock, typename Duration>
         bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
         {
-            std::unique_lock<std::mutex> lock(m_mtx);
-            return m_cv.wait_until(lock, timeout_time, [this]
-                                   { return m_ready; });
+            return wait_for(timeout_time - std::chrono::steady_clock::now());
         }
 
     private:
-        bool m_ready;
-
-        T m_value;
+        std::atomic<bool> m_ready;
+        std::atomic<std::shared_ptr<T>> m_value;
         std::exception_ptr m_eptr;
-
-        std::mutex m_mtx;
-        std::condition_variable m_cv;
     };
 
     template <typename T>
