@@ -8,7 +8,7 @@
 
 namespace pot::this_thread
 {
-    static std::atomic<int64_t> thread_counter{0};
+    inline std::atomic<int64_t> thread_counter{0};
 
     thread_local int64_t id = static_cast<int64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
     thread_local int64_t local_id = thread_counter++;
