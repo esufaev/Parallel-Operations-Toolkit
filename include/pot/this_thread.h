@@ -27,7 +27,7 @@ namespace pot::this_thread
         std::this_thread::sleep_until(time_point);
     }
 
-    void yileld()
+    void yield()
     {
         std::this_thread::yield();
     }
