@@ -22,6 +22,7 @@ namespace pot::this_thread
     [[nodiscard]] int64_t  local_id();
     [[nodiscard]] int64_t global_id();
 
+    void set_name(const std::string& name);
 
     template <typename Rep, typename Period>
     void sleep_for(const std::chrono::duration<Rep, Period> &duration)
