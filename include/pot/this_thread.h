@@ -3,17 +3,25 @@
 #include <thread>
 #include <chrono>
 
-#include "executor.h"
-#include "pot/executors/thread_pool_executor.h"
+#include "pot/executor.h"
+
+
+namespace pot::details::this_thread
+{
+    void init_thread_variables(int64_t local_id = 0, const std::weak_ptr<executor>& owner_executor = {});
+
+    inline thread_local int64_t tl_local_id ; // Identifier inside a specific executor
+    inline thread_local int64_t tl_global_id; // Global identifier across all executors
+    inline thread_local std::weak_ptr<executor> tl_owner_executor;
+}
+
 
 namespace pot::this_thread
 {
-    inline std::atomic<int64_t> thread_counter{0};
+    [[nodiscard]] int64_t system_id();
+    [[nodiscard]] int64_t  local_id();
+    [[nodiscard]] int64_t global_id();
 
-    thread_local int64_t id = static_cast<int64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    thread_local int64_t local_id = thread_counter++;
-
-    int64_t get_id() { return id; }
 
     template <typename Rep, typename Period>
     void sleep_for(const std::chrono::duration<Rep, Period> &duration)
@@ -27,10 +35,7 @@ namespace pot::this_thread
         std::this_thread::sleep_until(time_point);
     }
 
-    void yield()
-    {
-        std::this_thread::yield();
-    }
-
-    thread_local std::weak_ptr<pot::executor> executor;
+    void yield();
 }
+
+
