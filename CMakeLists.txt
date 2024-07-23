@@ -30,6 +30,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/platform.h
     include/${PROJECT_NAME}/this_thread.h
 
+    include/${PROJECT_NAME}/traits/compare.h
     include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/utils/time_it.h
 
