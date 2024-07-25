@@ -8,7 +8,10 @@ namespace pot
     class promise
     {
     public:
-        promise() : state(std::make_shared<shared_state<T>>()) {}
+        using allocator_type = pot::allocators::shared_allocator<std::shared_ptr<shared_state<T>>>;
+
+        promise(const allocator_type& alloc = allocator_type()) 
+            : state(std::make_shared<shared_state<T>>(alloc)) {}
 
         future<T> get_future()
         {

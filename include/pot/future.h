@@ -6,7 +6,8 @@
 #include <stdexcept>
 #include <chrono>
 
-#include "pot/this_thread.h"
+#include "this_thread.h"
+#include "pot/allocators/shared_allocator.h"
 
 namespace pot
 {
@@ -16,15 +17,28 @@ namespace pot
     template <typename T>
     class promise;
 
-    template <typename T>
+    template <typename T, typename Alloc = pot::allocators::shared_allocator<T>>
     class shared_state
     {
     public:
-        shared_state() : m_ready(false), m_value(nullptr) {}
+        using allocator_type = Alloc;
+
+        explicit shared_state(const allocator_type& alloc = allocator_type())
+            : m_ready(false), m_value(nullptr), m_allocator(alloc) {}
+
+        ~shared_state()
+        {
+            if (m_value.load())
+            {
+                m_allocator.destroy(m_value.load());
+                m_allocator.deallocate(m_value.load(), 1);
+            }
+        }
 
         void set_value(const T &value)
         {
-            auto tmp_value = std::make_shared<T>(value);
+            T* tmp_value = m_allocator.allocate(1);
+            m_allocator.construct(tmp_value, value);
             bool expected = false;
             if (m_ready.compare_exchange_strong(expected, true, std::memory_order_release))
             {
@@ -32,6 +46,8 @@ namespace pot
             }
             else
             {
+                m_allocator.destroy(tmp_value);
+                m_allocator.deallocate(tmp_value, 1);
                 throw std::runtime_error("Value already set!");
             }
         }
@@ -56,7 +72,9 @@ namespace pot
             {
                 std::rethrow_exception(m_eptr);
             }
-            return *(m_value.load(std::memory_order_acquire));
+            T* value = m_value.load(std::memory_order_acquire);
+            T result = *value;
+            return result;
         }
 
         void wait()
@@ -90,8 +108,9 @@ namespace pot
 
     private:
         std::atomic<bool> m_ready;
-        std::atomic<std::shared_ptr<T>> m_value;
+        std::atomic<T*> m_value;
         std::exception_ptr m_eptr;
+        allocator_type m_allocator;
     };
 
     template <typename T>
@@ -99,7 +118,9 @@ namespace pot
     {
     public:
         future() = default;
+
         future(future &&other) noexcept : m_state(std::move(other.m_state)) {}
+
         future &operator=(future &&other) noexcept
         {
             if (this != &other)
@@ -113,6 +134,7 @@ namespace pot
         {
             if (!m_state)
                 throw std::runtime_error("Future not valid!");
+
             return m_state->get();
         }
 
@@ -120,6 +142,7 @@ namespace pot
         {
             if (!m_state)
                 throw std::runtime_error("Future not valid!");
+
             m_state->wait();
         }
 
@@ -128,6 +151,7 @@ namespace pot
         {
             if (!m_state)
                 throw std::runtime_error("Future not valid!");
+
             return m_state->wait_for(timeout_duration);
         }
 
@@ -136,6 +160,7 @@ namespace pot
         {
             if (!m_state)
                 throw std::runtime_error("Future not valid!");
+
             return m_state->wait_until(timeout_time);
         }
 

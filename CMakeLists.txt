@@ -32,6 +32,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/promise.h
     include/${PROJECT_NAME}/this_thread.h
 
+    include/${PROJECT_NAME}/traits/compare.h
     include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/progress.h
@@ -42,13 +43,17 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_gq_esu.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_lq_esu.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_fpe.h
+
+    include/${PROJECT_NAME}/allocators/shared_allocator.h
 )
 
 set(POT_SOURCES
     src/executors/inline_executor.cpp
 
     src/experimental/thread_pool/thread_pool_fpe.cpp
-    # src/main.cpp
+
+    src/this_thread.cpp
+    src/thread.cpp
 )
 
 
