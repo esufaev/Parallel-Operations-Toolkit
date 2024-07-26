@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+#include <memory>
 #include "future.h"
 
 namespace pot
@@ -8,33 +10,29 @@ namespace pot
     class packaged_task
     {
     public:
-        using allocator_type = pot::allocators::shared_allocator<std::shared_ptr<shared_state<T>>>;
-
         template <typename Func>
-        explicit packaged_task(Func &&func, const allocator_type& alloc = allocator_type())
-            : func(std::forward<Func>(func)), state(std::make_shared<shared_state<T>>(alloc)) {}
+        explicit packaged_task(Func &&func)
+            : func(std::forward<Func>(func)), m_state(std::make_shared<future<T>>()) {}
 
-        future<T> get_future()
+        std::shared_ptr<future<T>> get_future()
         {
-            future<T> future;
-            future.set_state(state);
-            return future;
+            return m_state;
         }
 
         void operator()()
         {
             try
             {
-                state->set_value(func());
+                m_state->set_value(func());
             }
             catch (...)
             {
-                state->set_exception(std::current_exception());
+                m_state->set_exception(std::current_exception());
             }
         }
 
     private:
         std::function<T()> func;
-        std::shared_ptr<shared_state<T>> state;
+        std::shared_ptr<future<T>> m_state;
     };
 }

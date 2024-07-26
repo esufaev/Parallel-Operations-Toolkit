@@ -9,7 +9,7 @@ TEST_CASE("Promise set value test", "[promise]")
     auto f = p.get_future();
     p.set_value(42);
 
-    std::cout << f.get() << std::endl;
+    std::cout << f->get() << std::endl;
 
-    REQUIRE(f.get() == 42);
+    REQUIRE(f->get() == 42);
 }

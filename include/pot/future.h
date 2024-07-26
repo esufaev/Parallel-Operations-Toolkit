@@ -1,13 +1,12 @@
 #pragma once
 
 #include <atomic>
-#include <memory>
 #include <exception>
 #include <stdexcept>
 #include <chrono>
+#include <new>
 
-#include "this_thread.h"
-#include "pot/allocators/shared_allocator.h"
+#include "pot/this_thread.h"
 
 namespace pot
 {
@@ -17,69 +16,72 @@ namespace pot
     template <typename T>
     class promise;
 
-    template <typename T, typename Alloc = pot::allocators::shared_allocator<T>>
-    class shared_state
+    template <typename T>
+    class future
     {
     public:
-        using allocator_type = Alloc;
+        future() noexcept
+            : m_ready(false), m_has_value(false), m_has_exception(false) {}
 
-        explicit shared_state(const allocator_type& alloc = allocator_type())
-            : m_ready(false), m_value(nullptr), m_allocator(alloc) {}
-
-        ~shared_state()
+        future(future &&other) noexcept
+            : m_ready(other.m_ready.load()), m_has_value(other.m_has_value.load()), m_has_exception(other.m_has_exception.load())
         {
-            if (m_value.load())
+            if (m_has_value)
             {
-                m_allocator.destroy(m_value.load());
-                m_allocator.deallocate(m_value.load(), 1);
+                new (&m_value) T(std::move(other.m_value));
+            }
+            else if (m_has_exception)
+            {
+                m_exception = other.m_exception;
             }
         }
 
-        void set_value(const T &value)
+        future &operator=(future &&other) noexcept
         {
-            T* tmp_value = m_allocator.allocate(1);
-            m_allocator.construct(tmp_value, value);
-            bool expected = false;
-            if (m_ready.compare_exchange_strong(expected, true, std::memory_order_release))
+            if (this != &other)
             {
-                m_value.store(tmp_value, std::memory_order_release);
-            }
-            else
-            {
-                m_allocator.destroy(tmp_value);
-                m_allocator.deallocate(tmp_value, 1);
-                throw std::runtime_error("Value already set!");
-            }
-        }
+                if (m_has_value)
+                {
+                    m_value.~T();
+                }
 
-        void set_exception(std::exception_ptr eptr)
-        {
-            bool expected = false;
-            if (m_ready.compare_exchange_strong(expected, true, std::memory_order_release))
-            {
-                m_eptr = eptr;
+                m_ready.store(other.m_ready.load());
+                m_has_value.store(other.m_has_value.load());
+                m_has_exception.store(other.m_has_exception.load());
+
+                if (m_has_value)
+                {
+                    new (&m_value) T(std::move(other.m_value));
+                }
+                else if (m_has_exception)
+                {
+                    m_exception = other.m_exception;
+                }
             }
-            else 
-            {
-                throw std::runtime_error("Exception already set!");
-            }
+            return *this;
         }
 
         T get()
         {
             wait();
-            if (m_eptr)
+            if (m_has_exception)
             {
-                std::rethrow_exception(m_eptr);
+                std::rethrow_exception(m_exception);
             }
-            T* value = m_value.load(std::memory_order_acquire);
-            T result = *value;
-            return result;
+
+            if (m_has_value)
+            {
+                return std::move(m_value);
+            }
+            else
+            {
+                throw std::runtime_error("No value set!");
+            }
         }
 
         void wait()
         {
-            while (!m_ready.load(std::memory_order_acquire))
+            while (!m_ready.load())
             {
                 pot::this_thread::yield();
             }
@@ -89,7 +91,7 @@ namespace pot
         bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
             auto start_time = std::chrono::steady_clock::now();
-            while (!m_ready.load(std::memory_order_acquire))
+            while (!m_ready.load())
             {
                 if (std::chrono::steady_clock::now() - start_time > timeout_duration)
                 {
@@ -107,69 +109,46 @@ namespace pot
         }
 
     private:
+        alignas(T) unsigned char m_value_storage[sizeof(T)];
+
         std::atomic<bool> m_ready;
-        std::atomic<T*> m_value;
-        std::exception_ptr m_eptr;
-        allocator_type m_allocator;
-    };
+        std::atomic<bool> m_has_value;
+        std::atomic<bool> m_has_exception;
+        std::exception_ptr m_exception;
 
-    template <typename T>
-    class future
-    {
-    public:
-        future() = default;
+        T &m_value = reinterpret_cast<T &>(m_value_storage);
 
-        future(future &&other) noexcept : m_state(std::move(other.m_state)) {}
-
-        future &operator=(future &&other) noexcept
+        void set_value(const T &value)
         {
-            if (this != &other)
+            if (m_ready.exchange(true))
             {
-                m_state = std::move(other.m_state);
+                throw std::runtime_error("Value already set!");
             }
-            return *this;
+
+            new (&m_value) T(value);
+            m_has_value.store(true);
         }
 
-        T get()
+        void set_value(T &&value)
         {
-            if (!m_state)
-                throw std::runtime_error("Future not valid!");
+            if (m_ready.exchange(true))
+            {
+                throw std::runtime_error("Value already set!");
+            }
 
-            return m_state->get();
+            new (&m_value) T(std::move(value));
+            m_has_value.store(true);
         }
 
-        void wait()
+        void set_exception(std::exception_ptr eptr)
         {
-            if (!m_state)
-                throw std::runtime_error("Future not valid!");
+            if (m_ready.exchange(true))
+            {
+                throw std::runtime_error("Exception already set!");
+            }
 
-            m_state->wait();
-        }
-
-        template <typename Rep, typename Period>
-        bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
-        {
-            if (!m_state)
-                throw std::runtime_error("Future not valid!");
-
-            return m_state->wait_for(timeout_duration);
-        }
-
-        template <typename Clock, typename Duration>
-        bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
-        {
-            if (!m_state)
-                throw std::runtime_error("Future not valid!");
-
-            return m_state->wait_until(timeout_time);
-        }
-
-    private:
-        std::shared_ptr<shared_state<T>> m_state;
-
-        void set_state(std::shared_ptr<shared_state<T>> state)
-        {
-            m_state = state;
+            m_exception = eptr;
+            m_has_exception.store(true);
         }
 
         friend class packaged_task<T>;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "future.h"
+#include "pot/future.h"
 
 namespace pot
 {
@@ -8,29 +8,24 @@ namespace pot
     class promise
     {
     public:
-        using allocator_type = pot::allocators::shared_allocator<std::shared_ptr<shared_state<T>>>;
+        promise() noexcept : m_state(std::make_shared<future<T>>()) {}
 
-        promise(const allocator_type& alloc = allocator_type()) 
-            : state(std::make_shared<shared_state<T>>(alloc)) {}
-
-        future<T> get_future()
+        std::shared_ptr<future<T>> get_future()
         {
-            future<T> future;
-            future.set_state(state);
-            return future;
+            return m_state;
         }
 
         void set_value(const T &value)
         {
-            state->set_value(value);
+            m_state->set_value(value);
         }
 
         void set_exception(std::exception_ptr eptr)
         {
-            state->set_exception(eptr);
+            m_state->set_exception(eptr);
         }
 
     private:
-        std::shared_ptr<shared_state<T>> state;
+        std::shared_ptr<future<T>> m_state;
     };
 }
