@@ -45,6 +45,9 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_fpe.h
 
     include/${PROJECT_NAME}/allocators/shared_allocator.h
+
+    include/${PROJECT_NAME}/tasks/stack_task.h
+    include/${PROJECT_NAME}/tasks/stack_promise.h
 )
 
 set(POT_SOURCES
