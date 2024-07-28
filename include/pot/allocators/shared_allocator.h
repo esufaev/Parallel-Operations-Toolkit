@@ -1,11 +1,9 @@
 #pragma once
 
 #include <memory>
-#include <cstdlib>
 #include <limits>
-#include <new>
-#include <type_traits>
 #include <stdexcept>
+#include <utility>
 
 namespace pot::allocators
 {
@@ -15,12 +13,12 @@ namespace pot::allocators
     public:
         using value_type = T;
 
-        shared_allocator() = default;
+        shared_allocator() noexcept = default;
 
         template <typename U>
-        shared_allocator(const shared_allocator<U> &) noexcept {}
+        shared_allocator(const shared_allocator<U>&) noexcept {}
 
-        T *allocate(std::size_t n)
+        T* allocate(std::size_t n)
         {
             if (n == 0)
                 return nullptr;
@@ -28,26 +26,26 @@ namespace pot::allocators
             if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
                 throw std::bad_alloc();
 
-            void *ptr = std::malloc(n * sizeof(T));
+            void* ptr = ::operator new(n * sizeof(T));
             if (!ptr)
                 throw std::bad_alloc();
 
-            return static_cast<T *>(ptr);
+            return static_cast<T*>(ptr);
         }
 
-        void deallocate(T *ptr, std::size_t) noexcept
+        void deallocate(T* ptr, std::size_t) noexcept
         {
-            std::free(ptr);
+            ::operator delete(ptr);
         }
 
         template <typename U, typename... Args>
-        void construct(U *p, Args &&...args)
+        void construct(U* p, Args&&... args)
         {
-            ::new (static_cast<void *>(p)) U(std::forward<Args>(args)...);
+            ::new (static_cast<void*>(p)) U(std::forward<Args>(args)...);
         }
 
         template <typename U>
-        void destroy(U *p) noexcept
+        void destroy(U* p) noexcept
         {
             p->~U();
         }
@@ -58,14 +56,17 @@ namespace pot::allocators
             using other = shared_allocator<U>;
         };
 
-        bool operator==(const shared_allocator &) const noexcept
+        bool operator==(const shared_allocator&) const noexcept
         {
-            return *this == shared_allocator;
+            return true;
         }
 
-        bool operator!=(const shared_allocator &other) const noexcept
+        bool operator!=(const shared_allocator& other) const noexcept
         {
             return !(*this == other);
         }
     };
+
+    template <typename T>
+    using shared_allocator_for_state = shared_allocator<pot::tasks::details::shared_state<T>>;
 }

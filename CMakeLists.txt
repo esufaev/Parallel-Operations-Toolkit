@@ -48,6 +48,8 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/tasks/stack_task.h
     include/${PROJECT_NAME}/tasks/stack_promise.h
+    include/${PROJECT_NAME}/tasks/task.h
+    include/${PROJECT_NAME}/tasks/promise.h
 )
 
 set(POT_SOURCES
