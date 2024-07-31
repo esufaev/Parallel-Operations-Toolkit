@@ -34,6 +34,10 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/traits/guards.h
     include/${PROJECT_NAME}/utils/time_it.h
 
+    include/${PROJECT_NAME}/simd/simd_traits.h
+    include/${PROJECT_NAME}/simd/simd_auto.h
+    include/${PROJECT_NAME}/simd/simd_forced.h
+
     include/${PROJECT_NAME}/executors/inline_executor.h
 
     include/${PROJECT_NAME}/experimental/parfor.h
@@ -65,7 +69,7 @@ set_target_properties(
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS NO
 )
-target_compile_features(pot PUBLIC cxx_std_20)
+target_compile_features(pot PUBLIC cxx_std_23)
 # Apply warning flags
 apply_warning_flags_to_targets(pot)
 
