@@ -34,10 +34,14 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/traits/compare.h
     include/${PROJECT_NAME}/traits/guards.h
+
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/progress.h
+    include/${PROJECT_NAME}/utils/errors.h
 
     include/${PROJECT_NAME}/executors/inline_executor.h
+    include/${PROJECT_NAME}/executors/thread_executor.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor.h
 
     include/${PROJECT_NAME}/experimental/parfor.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_gq_esu.h
@@ -50,6 +54,12 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/tasks/stack_promise.h
     include/${PROJECT_NAME}/tasks/task.h
     include/${PROJECT_NAME}/tasks/promise.h
+    include/${PROJECT_NAME}/tasks/lazy_task.h
+    include/${PROJECT_NAME}/tasks/lazy_promise.h
+
+    include/${PROJECT_NAME}/tasks/impl/shared_state.h
+    include/${PROJECT_NAME}/tasks/impl/lazy_shared_state.h
+    include/${PROJECT_NAME}/tasks/impl/consts.h
 )
 
 set(POT_SOURCES

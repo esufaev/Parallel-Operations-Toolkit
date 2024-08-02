@@ -13,12 +13,6 @@ namespace pot
     namespace tasks
     {
         template <typename T>
-        class packaged_task;
-
-        template <typename T>
-        class promise;
-
-        template <typename T>
         class future
         {
         public:
