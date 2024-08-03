@@ -32,8 +32,19 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/promise.h
     include/${PROJECT_NAME}/this_thread.h
 
+    include/${PROJECT_NAME}/executors/inline_executor.h
+    include/${PROJECT_NAME}/executors/thread_executor.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor.h
+
+    include/${PROJECT_NAME}/simd/simd_traits.h
+    include/${PROJECT_NAME}/simd/simd_auto.h
+    include/${PROJECT_NAME}/simd/simd_forced.h
+
+    include/${PROJECT_NAME}/sync/sync_object.h
+
     include/${PROJECT_NAME}/traits/compare.h
     include/${PROJECT_NAME}/traits/guards.h
+
 
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/progress.h
@@ -63,12 +74,14 @@ set(POT_HEADERS
 )
 
 set(POT_SOURCES
+    src/this_thread.cpp
+    src/thread.cpp
+
     src/executors/inline_executor.cpp
+    src/executors/thread_executor.cpp
 
     src/experimental/thread_pool/thread_pool_fpe.cpp
 
-    src/this_thread.cpp
-    src/thread.cpp
 )
 
 
@@ -85,7 +98,7 @@ set_target_properties(
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS NO
 )
-target_compile_features(pot PUBLIC cxx_std_20)
+target_compile_features(pot PUBLIC cxx_std_23)
 # Apply warning flags
 apply_warning_flags_to_targets(pot)
 
