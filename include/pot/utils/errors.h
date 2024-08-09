@@ -23,4 +23,19 @@ namespace pot::errors
     {
         using empty_error::empty_error;
     };
+
+    struct iterrupted_error : public empty_error
+    {
+        using empty_error::empty_error;
+    };
+
+    struct big_task_promise_already_satisfied : public empty_error
+    {
+        using empty_error::empty_error;
+    };
+
+    struct big_shared_state_progress : public empty_error
+    {
+        using empty_error::empty_error;
+    };
 }

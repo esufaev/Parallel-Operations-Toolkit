@@ -62,14 +62,14 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/allocators/shared_allocator.h
 
     include/${PROJECT_NAME}/tasks/stack_task.h
-    include/${PROJECT_NAME}/tasks/stack_promise.h
     include/${PROJECT_NAME}/tasks/task.h
-    include/${PROJECT_NAME}/tasks/promise.h
     include/${PROJECT_NAME}/tasks/lazy_task.h
-    include/${PROJECT_NAME}/tasks/lazy_promise.h
+    include/${PROJECT_NAME}/tasks/big_task.h
+
 
     include/${PROJECT_NAME}/tasks/impl/shared_state.h
     include/${PROJECT_NAME}/tasks/impl/lazy_shared_state.h
+    include/${PROJECT_NAME}/tasks/impl/big_shared_state.h
     include/${PROJECT_NAME}/tasks/impl/consts.h
 )
 

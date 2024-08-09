@@ -8,20 +8,41 @@
 
 #include "pot/this_thread.h"
 
-namespace pot
+namespace pot::tasks
 {
-    namespace tasks
+    template <typename T>
+    class stack_task
     {
-        template <typename T>
-        class future
-        {
-        public:
-            future() noexcept
-                : m_ready(false), m_has_value(false), m_has_exception(false) {}
+    public:
+        stack_task() noexcept
+            : m_ready(false), m_has_value(false), m_has_exception(false) {}
 
-            future(future &&other) noexcept
-                : m_ready(other.m_ready.load()), m_has_value(other.m_has_value.load()), m_has_exception(other.m_has_exception.load())
+        stack_task(stack_task &&other) noexcept
+            : m_ready(other.m_ready.load()), m_has_value(other.m_has_value.load()), m_has_exception(other.m_has_exception.load())
+        {
+            if (m_has_value)
             {
+                new (&m_value) T(std::move(other.m_value));
+            }
+            else if (m_has_exception)
+            {
+                m_exception = other.m_exception;
+            }
+        }
+
+        stack_task &operator=(stack_task &&other) noexcept
+        {
+            if (this != &other)
+            {
+                if (m_has_value)
+                {
+                    m_value.~T();
+                }
+
+                m_ready.store(other.m_ready.load());
+                m_has_value.store(other.m_has_value.load());
+                m_has_exception.store(other.m_has_exception.load());
+
                 if (m_has_value)
                 {
                     new (&m_value) T(std::move(other.m_value));
@@ -31,124 +52,126 @@ namespace pot
                     m_exception = other.m_exception;
                 }
             }
+            return *this;
+        }
 
-            future &operator=(future &&other) noexcept
+        T get()
+        {
+            wait();
+            if (m_has_exception)
             {
-                if (this != &other)
-                {
-                    if (m_has_value)
-                    {
-                        m_value.~T();
-                    }
-
-                    m_ready.store(other.m_ready.load());
-                    m_has_value.store(other.m_has_value.load());
-                    m_has_exception.store(other.m_has_exception.load());
-
-                    if (m_has_value)
-                    {
-                        new (&m_value) T(std::move(other.m_value));
-                    }
-                    else if (m_has_exception)
-                    {
-                        m_exception = other.m_exception;
-                    }
-                }
-                return *this;
+                std::rethrow_exception(m_exception);
             }
 
-            T get()
+            if (m_has_value)
             {
-                wait();
-                if (m_has_exception)
-                {
-                    std::rethrow_exception(m_exception);
-                }
+                return std::move(m_value);
+            }
+            else
+            {
+                throw std::runtime_error("No value set!");
+            }
+        }
 
-                if (m_has_value)
+        void wait()
+        {
+            while (!m_ready.load())
+            {
+                pot::this_thread::yield();
+            }
+        }
+
+        template <typename Rep, typename Period>
+        bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
+        {
+            auto start_time = std::chrono::steady_clock::now();
+            while (!m_ready.load())
+            {
+                if (std::chrono::steady_clock::now() - start_time > timeout_duration)
                 {
-                    return std::move(m_value);
+                    return false;
                 }
-                else
-                {
-                    throw std::runtime_error("No value set!");
-                }
+                pot::this_thread::yield();
+            }
+            return true;
+        }
+
+        template <typename Clock, typename Duration>
+        bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
+        {
+            return wait_for(timeout_time - std::chrono::steady_clock::now());
+        }
+
+    private:
+        alignas(T) unsigned char m_value_storage[sizeof(T)];
+
+        std::atomic<bool> m_ready;
+        std::atomic<bool> m_has_value;
+        std::atomic<bool> m_has_exception;
+        std::exception_ptr m_exception;
+
+        T &m_value = reinterpret_cast<T &>(m_value_storage);
+
+        void set_value(const T &value)
+        {
+            if (m_ready.exchange(true))
+            {
+                throw std::runtime_error("Value already set!");
             }
 
-            void wait()
+            new (&m_value) T(value);
+            m_has_value.store(true);
+        }
+
+        void set_value(T &&value)
+        {
+            if (m_ready.exchange(true))
             {
-                while (!m_ready.load())
-                {
-                    pot::this_thread::yield();
-                }
+                throw std::runtime_error("Value already set!");
             }
 
-            template <typename Rep, typename Period>
-            bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
+            new (&m_value) T(std::move(value));
+            m_has_value.store(true);
+        }
+
+        void set_exception(std::exception_ptr eptr)
+        {
+            if (m_ready.exchange(true))
             {
-                auto start_time = std::chrono::steady_clock::now();
-                while (!m_ready.load())
-                {
-                    if (std::chrono::steady_clock::now() - start_time > timeout_duration)
-                    {
-                        return false;
-                    }
-                    pot::this_thread::yield();
-                }
-                return true;
+                throw std::runtime_error("Exception already set!");
             }
 
-            template <typename Clock, typename Duration>
-            bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
-            {
-                return wait_for(timeout_time - std::chrono::steady_clock::now());
-            }
+            m_exception = eptr;
+            m_has_exception.store(true);
+        }
 
-        private:
-            alignas(T) unsigned char m_value_storage[sizeof(T)];
+        friend class packaged_task<T>;
+        friend class promise<T>;
+    };
 
-            std::atomic<bool> m_ready;
-            std::atomic<bool> m_has_value;
-            std::atomic<bool> m_has_exception;
-            std::exception_ptr m_exception;
+    template <typename T>
+    class stack_promise
+    {
+    public:
+        stack_promise() noexcept : m_state(std::make_shared<stack_task<T>>()) {}
 
-            T &m_value = reinterpret_cast<T &>(m_value_storage);
+        std::shared_ptr<stack_task<T>> get_future()
+        {
+            return m_state;
+        }
 
-            void set_value(const T &value)
-            {
-                if (m_ready.exchange(true))
-                {
-                    throw std::runtime_error("Value already set!");
-                }
+        void set_value(const T &value)
+        {
+            m_state->set_value(value);
+        }
 
-                new (&m_value) T(value);
-                m_has_value.store(true);
-            }
+        void set_exception(std::exception_ptr eptr)
+        {
+            m_state->set_exception(eptr);
+        }
 
-            void set_value(T &&value)
-            {
-                if (m_ready.exchange(true))
-                {
-                    throw std::runtime_error("Value already set!");
-                }
+    private:
+        std::shared_ptr<stack_task<T>> m_state;
+    };
 
-                new (&m_value) T(std::move(value));
-                m_has_value.store(true);
-            }
-
-            void set_exception(std::exception_ptr eptr)
-            {
-                if (m_ready.exchange(true))
-                {
-                    throw std::runtime_error("Exception already set!");
-                }
-
-                m_exception = eptr;
-                m_has_exception.store(true);
-            }
-
-            friend class packaged_task<T>;
-            friend class promise<T>;
-        };
-    }
 }

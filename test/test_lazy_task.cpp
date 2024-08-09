@@ -1,6 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
 #include "pot/tasks/lazy_task.h"
-#include "pot/tasks/lazy_promise.h"
 #include "pot/this_thread.h"
 
 #include <thread>

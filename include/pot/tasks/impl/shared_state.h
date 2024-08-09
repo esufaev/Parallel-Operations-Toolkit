@@ -6,6 +6,8 @@
 #include <variant>
 
 #include "pot/this_thread.h"
+#include "pot/tasks/impl/consts.h"
+#include "pot/utils/errors.h"
 
 namespace pot::tasks::details
 {
@@ -49,7 +51,6 @@ namespace pot::tasks::details
 
         T get()
         {
-            throw_if_empty(shared_task_get_error_msg);
             wait();
             if (std::holds_alternative<std::exception_ptr>(m_variant))
             {
@@ -60,7 +61,6 @@ namespace pot::tasks::details
 
         void wait()
         {
-            throw_if_empty(shared_task_wait_error_msg);
             while (!m_ready.load(std::memory_order_acquire))
             {
                 pot::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -70,7 +70,6 @@ namespace pot::tasks::details
         template <typename Rep, typename Period>
         bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
-            throw_if_empty(shared_task_wait_for_error_msg);
             auto start_time = std::chrono::steady_clock::now();
             while (!m_ready.load(std::memory_order_acquire))
             {
@@ -86,26 +85,16 @@ namespace pot::tasks::details
         template <typename Clock, typename Duration>
         bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
         {
-            throw_if_empty(shared_task_wait_until_error_msg);
             return wait_for(timeout_time - std::chrono::steady_clock::now());
+        }
+
+        bool is_ready() noexcept
+        {
+            return m_ready.load();
         }
 
     private:
         std::atomic<bool> m_ready;
         variant_type m_variant;
-
-        void throw_if_empty(const char *message) const
-        {
-            if (static_cast<bool>(!m_state))
-            {
-                throw errors::empty_result(message);
-            }
-        }
-
-        template <typename T>
-        void set_value(const &T value)
-        {
-            
-        }
     };
 }
