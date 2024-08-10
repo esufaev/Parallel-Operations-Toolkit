@@ -2,20 +2,45 @@
 
 #include <memory>
 #include <chrono>
+#include <stdexcept>
+#include <string>
 
 #include "pot/tasks/impl/shared_state.h"
-#include "pot/utils/errors.h"
-#include "pot/tasks/impl/consts.h"
 
 namespace pot::tasks
 {
+    namespace details
+    {
+        enum class task_error_code
+        {
+            empty_result,
+            value_already_set,
+            exception_already_set,
+        };
+
+        class task_exception : public std::runtime_error
+        {
+        public:
+            task_exception(task_error_code code, const std::string &message)
+                : std::runtime_error(message), error_code(code) {}
+
+            task_error_code code() const noexcept
+            {
+                return error_code;
+            }
+
+        private:
+            task_error_code error_code;
+        };
+    }
+
     template <typename T>
     class task
     {
     public:
         task() noexcept = default;
         task(task &&rhs) noexcept = default;
-        task(details::shared_state<T> *state) : m_state(state) {}
+        task(details::big_shared_state<T> *state) : m_state(state) {}
 
         task &operator=(task &&rhs) noexcept
         {
@@ -23,7 +48,6 @@ namespace pot::tasks
             {
                 m_state = std::move(rhs.m_state);
             }
-
             return *this;
         }
 
@@ -37,38 +61,47 @@ namespace pot::tasks
 
         T get()
         {
-            throw_if_empty(pot::details::consts::task_get_error_msg);
+            throw_if_empty("Attempted to get value from an empty task.");
             return m_state->get();
         }
 
         void wait()
         {
-            throw_if_empty(pot::details::consts::task_wait_error_msg);
+            if (!m_state)
+            {
+                throw details::task_exception(details::task_error_code::empty_result, "pot::tasks::task::wait() - attempted to wait on an empty task.");
+            }
             m_state->wait();
         }
 
         template <typename Rep, typename Period>
         bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
-            throw_if_empty(pot::details::consts::task_wait_for_error_msg);
+            if (!m_state)
+            {
+                throw details::task_exception(details::task_error_code::empty_result, "pot::tasks::task::wait_for() - attempted to wait_for on an empty task.");
+            }
             return m_state->wait_for(timeout_duration);
         }
 
         template <typename Clock, typename Duration>
         bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
         {
-            throw_if_empty(pot::details::consts::task_wait_until_error_msg);
+            if (!m_state)
+            {
+                throw details::task_exception(details::task_error_code::empty_result, "pot::tasks::task::wait_until() - attempted to wait_until on an empty task.");
+            }
             return m_state->wait_until(timeout_time);
         }
 
     private:
-        details::shared_state<T> *m_state;
+        details::big_shared_state<T> *m_state;
 
         void throw_if_empty(const char *message) const
         {
-            if (static_cast<bool>(!m_state))
+            if (!m_state)
             {
-                throw errors::empty_result(message);
+                throw details::task_exception(details::task_error_code::empty_result, message);
             }
         }
     };
@@ -98,38 +131,59 @@ namespace pot::tasks
 
         void set_value(const T &value)
         {
-            m_state->set_value(value);
+            if (m_state)
+            {
+                m_state->set_value(value);
+            }
+            else
+            {
+                throw details::task_exception(details::task_error_code::value_already_set, "pot::tasks::promise::set_value() - state is empty; cannot set value.");
+            }
         }
 
         void set_value(T &&value)
         {
-            m_state->set_value(std::move(value));
+            if (m_state)
+            {
+                m_state->set_value(std::move(value));
+            }
+            else
+            {
+                throw details::task_exception(details::task_error_code::value_already_set, "pot::tasks::promise::set_value() - state is empty; cannot set value.");
+            }
         }
 
         void set_exception(std::exception_ptr eptr)
         {
-            m_state->set_exception(eptr);
+            if (m_state)
+            {
+                m_state->set_exception(eptr);
+            }
+            else
+            {
+                throw details::task_exception(details::task_error_code::exception_already_set, "pot::tasks::promise::set_exception() - state is empty; cannot set exception.");
+            }
         }
 
-        details::shared_state<T> *get_state() const
+        details::big_shared_state<T> *get_state() const
         {
             return m_state;
         }
 
     private:
-        details::shared_state<T> *allocate_shared_state()
+        details::big_shared_state<T> *allocate_shared_state()
         {
             auto ptr = m_allocator.allocate(1);
-            return new (ptr) details::shared_state<T>();
+            return new (ptr) details::big_shared_state<T>();
         }
 
-        void deallocate_shared_state(details::shared_state<T> *state)
+        void deallocate_shared_state(details::big_shared_state<T> *state)
         {
-            state->~shared_state();
+            state->~big_shared_state();
             m_allocator.deallocate(state, 1);
         }
 
         Allocator m_allocator;
-        details::shared_state<T> *m_state;
+        details::big_shared_state<T> *m_state;
     };
 }

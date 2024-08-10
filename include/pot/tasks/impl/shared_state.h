@@ -4,13 +4,35 @@
 #include <exception>
 #include <chrono>
 #include <variant>
+#include <stdexcept>
+#include <string>
 
 #include "pot/this_thread.h"
-#include "pot/tasks/impl/consts.h"
-#include "pot/utils/errors.h"
 
 namespace pot::tasks::details
 {
+    enum class shared_state_error_code
+    {
+        value_already_set,
+        exception_already_set,
+        unknown_error
+    };
+
+    class shared_state_exception : public std::runtime_error
+    {
+    public:
+        shared_state_exception(shared_state_error_code code, const std::string &message)
+            : std::runtime_error(message), error_code(code) {}
+
+        shared_state_error_code code() const noexcept
+        {
+            return error_code;
+        }
+
+    private:
+        shared_state_error_code error_code;
+    };
+
     template <typename T>
     class shared_state
     {
@@ -23,7 +45,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw std::runtime_error("Value already set!");
+                throw shared_state_exception(shared_state_error_code::value_already_set, "pot::tasks::details::shared_state::set_value() - value already set.");
             }
 
             m_variant = value;
@@ -33,7 +55,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw std::runtime_error("Value already set!");
+                throw shared_state_exception(shared_state_error_code::value_already_set, "pot::tasks::details::shared_state::set_value() - value already set.");
             }
 
             m_variant = std::move(value);
@@ -43,7 +65,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw std::runtime_error("Exception already set!");
+                throw shared_state_exception(shared_state_error_code::exception_already_set, "pot::tasks::details::shared_state::set_exception() - exception already set.");
             }
 
             m_variant = eptr;

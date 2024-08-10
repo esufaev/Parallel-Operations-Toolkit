@@ -6,15 +6,34 @@
 #include <variant>
 #include <chrono>
 #include <thread>
+#include <string>
+#include <stdexcept>
 
 #include "pot/this_thread.h"
-#include "pot/utils/errors.h"
-#include "pot/tasks/impl/consts.h"
 
 namespace pot::tasks::details
 {
-    template <typename T>
-    class lazy_promise;
+    enum class lazy_shared_state_error_code
+    {
+        empty_result,
+        promise_already_satisfied,
+        unknown_error
+    };
+
+    class lazy_shared_state_exception : public std::runtime_error
+    {
+    public:
+        lazy_shared_state_exception(lazy_shared_state_error_code code, const std::string &message)
+            : std::runtime_error(message), error_code(code) {}
+
+        lazy_shared_state_error_code code() const noexcept
+        {
+            return error_code;
+        }
+
+    private:
+        lazy_shared_state_error_code error_code;
+    };
 
     template <typename T>
     class lazy_shared_state
@@ -52,7 +71,7 @@ namespace pot::tasks::details
             {
                 std::rethrow_exception(std::get<std::exception_ptr>(m_variant));
             }
-            throw pot::errors::empty_result(pot::details::consts::shared_task_get_error_msg);
+            throw lazy_shared_state_exception(lazy_shared_state_error_code::empty_result, "pot::tasks::details::lazy_shared_state::get() - lazy task failed: empty result.");
         }
 
         void wait()
@@ -91,6 +110,10 @@ namespace pot::tasks::details
             {
                 m_variant = value;
             }
+            else
+            {
+                throw lazy_shared_state_exception(lazy_shared_state_error_code::promise_already_satisfied, "pot::tasks::details::lazy_shared_state::set_value() - promise already satisfied.");
+            }
         }
 
         void set_exception(std::exception_ptr exception)
@@ -99,6 +122,10 @@ namespace pot::tasks::details
             if (m_ready.compare_exchange_strong(expected, true, std::memory_order_acquire))
             {
                 m_variant = exception;
+            }
+            else
+            {
+                throw lazy_shared_state_exception(lazy_shared_state_error_code::promise_already_satisfied, "pot::tasks::details::lazy_shared_state::set_exception() - promise already satisfied.");
             }
         }
 
@@ -111,7 +138,5 @@ namespace pot::tasks::details
         std::function<T()> m_func;
         std::atomic<bool> m_ready;
         variant_type m_variant;
-
-        friend class lazy_promise<T>;
     };
 }

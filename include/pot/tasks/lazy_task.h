@@ -4,15 +4,38 @@
 #include <exception>
 #include <chrono>
 #include <functional>
+#include <memory>
+#include <string>
 
-#include "pot/utils/errors.h"
-#include "pot/tasks/impl/consts.h"
 #include "pot/tasks/impl/lazy_shared_state.h"
 
 namespace pot::tasks
 {
-    template <typename T>
-    class lazy_promise;
+    namespace details
+    {
+        enum class lazy_task_error_code
+        {
+            empty_result,
+            lazy_task_failed,
+            promise_already_satisfied,
+            unknown_error
+        };
+
+        class lazy_task_exception : public std::runtime_error
+        {
+        public:
+            lazy_task_exception(lazy_task_error_code code, const std::string &message)
+                : std::runtime_error(message), error_code(code) {}
+
+            lazy_task_error_code code() const noexcept
+            {
+                return error_code;
+            }
+
+        private:
+            lazy_task_error_code error_code;
+        };
+    }
 
     template <typename T>
     class lazy_task
@@ -20,17 +43,17 @@ namespace pot::tasks
     public:
         lazy_task() noexcept = default;
 
-        explicit lazy_task(details::lazy_shared_state<T> *shared_state)
+        explicit lazy_task(details::lazy_shared_state<T>* shared_state)
             : m_shared_state(shared_state)
         {
         }
 
-        lazy_task(lazy_task &&rhs) noexcept
+        lazy_task(lazy_task&& rhs) noexcept
             : m_shared_state(rhs.m_shared_state)
         {
         }
 
-        lazy_task &operator=(lazy_task &&rhs) noexcept
+        lazy_task& operator=(lazy_task&& rhs) noexcept
         {
             if (this != &rhs)
             {
@@ -39,8 +62,8 @@ namespace pot::tasks
             return *this;
         }
 
-        lazy_task(const lazy_task &rhs) = delete;
-        lazy_task &operator=(const lazy_task &rhs) = delete;
+        lazy_task(const lazy_task& rhs) = delete;
+        lazy_task& operator=(const lazy_task& rhs) = delete;
 
         explicit operator bool() const noexcept
         {
@@ -51,7 +74,7 @@ namespace pot::tasks
         {
             if (!m_shared_state)
             {
-                throw pot::errors::lazy_task_failed(pot::details::consts::lazy_task_get_error_msg);
+                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::get() - result is empty.");
             }
             m_shared_state->run();
             return m_shared_state->get();
@@ -61,37 +84,37 @@ namespace pot::tasks
         {
             if (!m_shared_state)
             {
-                throw pot::errors::lazy_task_failed(pot::details::consts::lazy_task_wait_error_msg);
+                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait() - result is empty.");
             }
             m_shared_state->run();
             if (!m_shared_state->m_ready.load(std::memory_order_acquire))
             {
-                throw pot::errors::empty_result(pot::details::consts::shared_task_wait_error_msg);
+                throw details::lazy_task_exception(details::lazy_task_error_code::empty_result, "pot::lazy_task::wait() - result is empty. Task is not ready.");
             }
         }
 
         template <typename Rep, typename Period>
-        bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
+        bool wait_for(const std::chrono::duration<Rep, Period>& timeout_duration)
         {
             if (!m_shared_state)
             {
-                throw pot::errors::lazy_task_failed(pot::details::consts::lazy_task_wait_for_error_msg);
+                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait_for() - result is empty.");
             }
             return m_shared_state->wait_for(timeout_duration);
         }
 
         template <typename Clock, typename Duration>
-        bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
+        bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time)
         {
             if (!m_shared_state)
             {
-                throw pot::errors::lazy_task_failed(pot::details::consts::lazy_task_wait_until_error_msg);
+                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait_until() - result is empty.");
             }
             return m_shared_state->wait_until(timeout_time);
         }
 
     private:
-        details::lazy_shared_state<T> *m_shared_state;
+        details::lazy_shared_state<T>* m_shared_state;
     };
 
     template <typename T>
@@ -109,15 +132,15 @@ namespace pot::tasks
             delete m_shared_state;
         }
 
-        lazy_promise(const lazy_promise &) = delete;
-        lazy_promise &operator=(const lazy_promise &) = delete;
+        lazy_promise(const lazy_promise&) = delete;
+        lazy_promise& operator=(const lazy_promise&) = delete;
 
         lazy_task<T> get_future()
         {
             return lazy_task<T>(m_shared_state);
         }
 
-        void set_value(const T &value)
+        void set_value(const T& value)
         {
             if (m_shared_state)
             {
@@ -134,6 +157,6 @@ namespace pot::tasks
         }
 
     private:
-        details::lazy_shared_state<T> *m_shared_state;
+        details::lazy_shared_state<T>* m_shared_state;
     };
 }

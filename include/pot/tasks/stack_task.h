@@ -5,11 +5,38 @@
 #include <stdexcept>
 #include <chrono>
 #include <new>
+#include <string>
 
 #include "pot/this_thread.h"
 
 namespace pot::tasks
 {
+    namespace details
+    {
+        enum class stack_error_code
+        {
+            value_already_set,
+            exception_already_set,
+            no_value_set,
+            unknown_error
+        };
+
+        class stack_exception : public std::runtime_error
+        {
+        public:
+            stack_exception(stack_error_code code, const std::string &message)
+                : std::runtime_error(message), error_code(code) {}
+
+            stack_error_code code() const noexcept
+            {
+                return error_code;
+            }
+
+        private:
+            stack_error_code error_code;
+        };
+    }
+
     template <typename T>
     class stack_task
     {
@@ -69,7 +96,7 @@ namespace pot::tasks
             }
             else
             {
-                throw std::runtime_error("No value set!");
+                throw details::stack_exception(stack_error_code::no_value_set, "pot::task::stack_task::get() - no value set.");
             }
         }
 
@@ -116,7 +143,7 @@ namespace pot::tasks
         {
             if (m_ready.exchange(true))
             {
-                throw std::runtime_error("Value already set!");
+                throw details::stack_exception(details::stack_error_code::value_already_set, "pot::tasks::stack_task::set_value() - value already set.");
             }
 
             new (&m_value) T(value);
@@ -127,7 +154,7 @@ namespace pot::tasks
         {
             if (m_ready.exchange(true))
             {
-                throw std::runtime_error("Value already set!");
+                throw details::stack_exception(details::stack_error_code::value_already_set, "pot::tasks::stack_task::set_value() - value already set.");
             }
 
             new (&m_value) T(std::move(value));
@@ -138,15 +165,14 @@ namespace pot::tasks
         {
             if (m_ready.exchange(true))
             {
-                throw std::runtime_error("Exception already set!");
+                throw details::stack_exception(details::stack_error_code::exception_already_set, "pot::tasks::stack_task::set_exception - exception already set.");
             }
 
             m_exception = eptr;
             m_has_exception.store(true);
         }
 
-        friend class packaged_task<T>;
-        friend class promise<T>;
+        friend class stack_promise<T>;
     };
 
     template <typename T>
@@ -173,5 +199,4 @@ namespace pot::tasks
     private:
         std::shared_ptr<stack_task<T>> m_state;
     };
-
 }
