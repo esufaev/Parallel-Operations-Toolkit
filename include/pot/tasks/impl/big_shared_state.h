@@ -75,9 +75,13 @@ namespace pot::tasks::details
         T get()
         {
             wait();
-            if (std::holds_alternative<std::exception_ptr>(m_variant) || !m_interrupted.load())
+            if (std::holds_alternative<std::exception_ptr>(m_variant))
             {
                 std::rethrow_exception(std::get<std::exception_ptr>(m_variant));
+            }
+            if (std::holds_alternative<std::monostate>(m_variant))
+            {
+                throw big_shared_state_exception(big_shared_state_error_code::empty_result, "No value set.");
             }
             return std::get<T>(m_variant);
         }
@@ -86,6 +90,11 @@ namespace pot::tasks::details
         {
             while (!m_ready.load(std::memory_order_acquire) && !m_interrupted.load())
             {
+                if (m_paused.load())
+                {
+                    pot::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
                 pot::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             if (m_interrupted.load())
@@ -100,6 +109,11 @@ namespace pot::tasks::details
             auto start_time = std::chrono::steady_clock::now();
             while (!m_ready.load(std::memory_order_acquire) && !m_interrupted.load())
             {
+                if (m_paused.load())
+                {
+                    pot::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
                 if (std::chrono::steady_clock::now() - start_time > timeout_duration)
                 {
                     return false;
@@ -152,10 +166,21 @@ namespace pot::tasks::details
             return m_interrupted.load(std::memory_order_acquire);
         }
 
+        void pause() noexcept
+        {
+            m_paused.store(true, std::memory_order_release);
+        }
+
+        void resume() noexcept
+        {
+            m_paused.store(false, std::memory_order_release);
+        }
+
     private:
-        std::atomic<bool> m_ready = false;
-        std::atomic<int> m_progress = 0;
-        std::atomic<bool> m_interrupted = false;
+        std::atomic<bool> m_ready{false};
+        std::atomic<bool> m_interrupted{false};
+        std::atomic<int> m_progress{0};
+        std::atomic<bool> m_paused{false};
 
         variant_type m_variant = std::monostate{};
     };

@@ -108,22 +108,63 @@ namespace pot::tasks
 
         void interrupt() noexcept
         {
+            if (!m_state)
+            {
+                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::interrupt() - result is empty.");
+            }
             m_state->interrupt();
         }
 
-        bool is_interrupted() const noexcept
+        bool is_interrupted() const
         {
+            if (!m_state)
+            {
+                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::is_interrupted() - result is empty.");
+            }
             return m_state->is_interrupted();
         }
 
         void set_progress(int progress)
         {
-            m_state->set_progress(progress);
+            if (!m_state)
+            {
+                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::set_progress() - result is empty.");
+            }
+            if (progress >= 0 && progress <= 100)
+            {
+                m_state->set_progress(progress);
+            }
+            else
+            {
+                std::cerr << "Wrong progress value: " << progress << std::endl;
+            }
         }
 
-        int get_progress() const noexcept
+        int get_progress() const
         {
+            if (!m_state)
+            {
+                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::get_progress() - result is empty.");
+            }
             return m_state->get_progress();
+        }
+
+        void pause()
+        {
+            if (!m_state)
+            {
+                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::pause() - result is empty.");
+            }
+            m_state->pause();
+        }
+
+        void resume()
+        {
+            if (!m_state)
+            {
+                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::resume() - result is empty.");
+            }
+            m_state->resume();
         }
 
     private:
