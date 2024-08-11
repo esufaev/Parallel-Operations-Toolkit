@@ -42,7 +42,7 @@ namespace pot::tasks::details
         using variant_type = std::variant<std::monostate, T, std::exception_ptr>;
 
         explicit lazy_shared_state(std::function<T()> func)
-            : m_func(std::move(func)), m_ready(false), m_variant(std::monostate{}) {}
+            : m_func(std::move(func)) {}
 
         void run()
         {
@@ -136,7 +136,7 @@ namespace pot::tasks::details
 
     private:
         std::function<T()> m_func;
-        std::atomic<bool> m_ready;
-        variant_type m_variant;
+        std::atomic<bool> m_ready = false;
+        variant_type m_variant = std::monostate{};
     };
 }

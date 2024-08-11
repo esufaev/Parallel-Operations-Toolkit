@@ -40,7 +40,7 @@ namespace pot::tasks::details
     public:
         using variant_type = std::variant<std::monostate, T, std::exception_ptr>;
 
-        big_shared_state() : m_ready(false), m_progress(0), m_variant(std::monostate{}), m_interrupted(false) {}
+        big_shared_state() {}
 
         void set_value(const T &value)
         {
@@ -153,10 +153,10 @@ namespace pot::tasks::details
         }
 
     private:
-        std::atomic<bool> m_ready;
-        std::atomic<int> m_progress;
-        std::atomic<bool> m_interrupted;
+        std::atomic<bool> m_ready = false;
+        std::atomic<int> m_progress = 0;
+        std::atomic<bool> m_interrupted = false;
 
-        variant_type m_variant;
+        variant_type m_variant = std::monostate{};
     };
 }

@@ -41,8 +41,7 @@ namespace pot::tasks
     class stack_task
     {
     public:
-        stack_task() noexcept
-            : m_ready(false), m_has_value(false), m_has_exception(false) {}
+        stack_task() noexcept {}
 
         stack_task(stack_task &&other) noexcept
             : m_ready(other.m_ready.load()), m_has_value(other.m_has_value.load()), m_has_exception(other.m_has_exception.load())
@@ -132,9 +131,9 @@ namespace pot::tasks
     private:
         alignas(T) unsigned char m_value_storage[sizeof(T)];
 
-        std::atomic<bool> m_ready;
-        std::atomic<bool> m_has_value;
-        std::atomic<bool> m_has_exception;
+        std::atomic<bool> m_ready = false;
+        std::atomic<bool> m_has_value = false;
+        std::atomic<bool> m_has_exception = false;
         std::exception_ptr m_exception;
 
         T &m_value = reinterpret_cast<T &>(m_value_storage);
@@ -179,7 +178,7 @@ namespace pot::tasks
     class stack_promise
     {
     public:
-        stack_promise() noexcept : m_state(std::make_shared<stack_task<T>>()) {}
+        stack_promise() noexcept {}
 
         std::shared_ptr<stack_task<T>> get_future()
         {
@@ -197,6 +196,6 @@ namespace pot::tasks
         }
 
     private:
-        std::shared_ptr<stack_task<T>> m_state;
+        std::shared_ptr<stack_task<T>> m_state = std::make_shared<stack_task<T>>();
     };
 }

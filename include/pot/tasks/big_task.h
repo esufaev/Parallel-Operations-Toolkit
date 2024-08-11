@@ -40,7 +40,7 @@ namespace pot::tasks
     class big_task
     {
     public:
-        big_task() noexcept : m_state(nullptr) {}
+        big_task() noexcept {}
         explicit big_task(details::big_shared_state<T> *state)
             : m_state(state) {}
 
@@ -127,15 +127,14 @@ namespace pot::tasks
         }
 
     private:
-        details::big_shared_state<T> *m_state;
+        details::big_shared_state<T> *m_state = nullptr;
     };
 
     template <typename T>
     class big_task_promise
     {
     public:
-        big_task_promise()
-            : m_state(std::make_shared<details::big_shared_state<T>>()) {}
+        big_task_promise() {}
 
         big_task<T> get_task() noexcept
         {
@@ -188,6 +187,6 @@ namespace pot::tasks
         big_task_promise &operator=(const big_task_promise &) = delete;
 
     private:
-        std::shared_ptr<details::big_shared_state<T>> m_state;
+        std::shared_ptr<details::big_shared_state<T>> m_state = std::make_shared<details::big_shared_state<T>>();
     };
 }

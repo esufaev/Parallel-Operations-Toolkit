@@ -48,7 +48,6 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/progress.h
-    include/${PROJECT_NAME}/utils/errors.h
 
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
@@ -70,7 +69,6 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/tasks/impl/shared_state.h
     include/${PROJECT_NAME}/tasks/impl/lazy_shared_state.h
     include/${PROJECT_NAME}/tasks/impl/big_shared_state.h
-    include/${PROJECT_NAME}/tasks/impl/consts.h
 )
 
 set(POT_SOURCES

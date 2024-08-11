@@ -121,8 +121,7 @@ namespace pot::tasks
     class lazy_promise
     {
     public:
-        lazy_promise()
-            : m_shared_state(nullptr) {}
+        lazy_promise() {}
 
         explicit lazy_promise(std::function<T()> func)
             : m_shared_state(new details::lazy_shared_state<T>(std::move(func))) {}
@@ -157,6 +156,6 @@ namespace pot::tasks
         }
 
     private:
-        details::lazy_shared_state<T>* m_shared_state;
+        details::lazy_shared_state<T>* m_shared_state = nullptr;
     };
 }
