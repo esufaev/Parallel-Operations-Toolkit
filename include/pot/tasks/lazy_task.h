@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "pot/tasks/impl/lazy_shared_state.h"
 
@@ -43,27 +44,17 @@ namespace pot::tasks
     public:
         lazy_task() noexcept = default;
 
-        explicit lazy_task(details::lazy_shared_state<T>* shared_state)
-            : m_shared_state(shared_state)
+        explicit lazy_task(std::shared_ptr<details::lazy_shared_state<T>> shared_state)
+            : m_shared_state(std::move(shared_state))
         {
         }
 
-        lazy_task(lazy_task&& rhs) noexcept
-            : m_shared_state(rhs.m_shared_state)
-        {
-        }
+        lazy_task(lazy_task&& rhs) noexcept = default;
 
-        lazy_task& operator=(lazy_task&& rhs) noexcept
-        {
-            if (this != &rhs)
-            {
-                m_shared_state = rhs.m_shared_state;
-            }
-            return *this;
-        }
+        lazy_task& operator=(lazy_task&& rhs) noexcept = default;
 
-        lazy_task(const lazy_task& rhs) = delete;
-        lazy_task& operator=(const lazy_task& rhs) = delete;
+        lazy_task(const lazy_task& rhs) = default;
+        lazy_task& operator=(const lazy_task& rhs) = default;
 
         explicit operator bool() const noexcept
         {
@@ -87,7 +78,7 @@ namespace pot::tasks
                 throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait() - result is empty.");
             }
             m_shared_state->run();
-            if (!m_shared_state->m_ready.load(std::memory_order_acquire))
+            if (!m_shared_state->is_ready())
             {
                 throw details::lazy_task_exception(details::lazy_task_error_code::empty_result, "pot::lazy_task::wait() - result is empty. Task is not ready.");
             }
@@ -114,25 +105,20 @@ namespace pot::tasks
         }
 
     private:
-        details::lazy_shared_state<T>* m_shared_state;
+        std::shared_ptr<details::lazy_shared_state<T>> m_shared_state;
     };
 
     template <typename T>
     class lazy_promise
     {
     public:
-        lazy_promise() {}
+        lazy_promise() = default;
 
         explicit lazy_promise(std::function<T()> func)
-            : m_shared_state(new details::lazy_shared_state<T>(std::move(func))) {}
+            : m_shared_state(std::make_shared<details::lazy_shared_state<T>>(std::move(func))) {}
 
-        ~lazy_promise()
-        {
-            delete m_shared_state;
-        }
-
-        lazy_promise(const lazy_promise&) = delete;
-        lazy_promise& operator=(const lazy_promise&) = delete;
+        lazy_promise(const lazy_promise&) = default;
+        lazy_promise& operator=(const lazy_promise&) = default;
 
         lazy_task<T> get_future()
         {
@@ -156,6 +142,6 @@ namespace pot::tasks
         }
 
     private:
-        details::lazy_shared_state<T>* m_shared_state = nullptr;
+        std::shared_ptr<details::lazy_shared_state<T>> m_shared_state;
     };
-}
+} // namespace pot::tasks
