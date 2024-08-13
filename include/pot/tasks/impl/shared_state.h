@@ -11,28 +11,6 @@
 
 namespace pot::tasks::details
 {
-    enum class shared_state_error_code
-    {
-        value_already_set,
-        exception_already_set,
-        unknown_error
-    };
-
-    class shared_state_exception : public std::runtime_error
-    {
-    public:
-        shared_state_exception(shared_state_error_code code, const std::string &message)
-            : std::runtime_error(message), error_code(code) {}
-
-        shared_state_error_code code() const noexcept
-        {
-            return error_code;
-        }
-
-    private:
-        shared_state_error_code error_code;
-    };
-
     template <typename T>
     class shared_state
     {
@@ -45,7 +23,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw shared_state_exception(shared_state_error_code::value_already_set, "pot::tasks::details::shared_state::set_value() - value already set.");
+                throw std::runtime_error("pot::tasks::details::shared_state::set_value() - value already set.");
             }
 
             m_variant = value;
@@ -55,7 +33,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw shared_state_exception(shared_state_error_code::value_already_set, "pot::tasks::details::shared_state::set_value() - value already set.");
+                throw std::runtime_error("pot::tasks::details::shared_state::set_value() - value already set.");
             }
 
             m_variant = std::move(value);
@@ -65,7 +43,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw shared_state_exception(shared_state_error_code::exception_already_set, "pot::tasks::details::shared_state::set_exception() - exception already set.");
+                throw std::runtime_error("pot::tasks::details::shared_state::set_exception() - exception already set.");
             }
 
             m_variant = eptr;
@@ -77,6 +55,10 @@ namespace pot::tasks::details
             if (std::holds_alternative<std::exception_ptr>(m_variant))
             {
                 std::rethrow_exception(std::get<std::exception_ptr>(m_variant));
+            }
+            if (std::holds_alternative<std::monostate>(m_variant))
+            {
+                throw std::runtime_error("pot::tasks::details::shared_state::get() - no value set.");
             }
             return std::get<T>(m_variant);
         }
@@ -116,7 +98,7 @@ namespace pot::tasks::details
         }
 
     private:
-        std::atomic<bool> m_ready = false;
-        variant_type m_variant = std::monostate{};
+        std::atomic<bool> m_ready {false};
+        variant_type m_variant {std::monostate{}};
     };
 }

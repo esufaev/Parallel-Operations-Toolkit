@@ -12,32 +12,6 @@
 
 namespace pot::tasks
 {
-    namespace details
-    {
-        enum class lazy_task_error_code
-        {
-            empty_result,
-            lazy_task_failed,
-            promise_already_satisfied,
-            unknown_error
-        };
-
-        class lazy_task_exception : public std::runtime_error
-        {
-        public:
-            lazy_task_exception(lazy_task_error_code code, const std::string &message)
-                : std::runtime_error(message), error_code(code) {}
-
-            lazy_task_error_code code() const noexcept
-            {
-                return error_code;
-            }
-
-        private:
-            lazy_task_error_code error_code;
-        };
-    }
-
     template <typename T>
     class lazy_task
     {
@@ -65,7 +39,7 @@ namespace pot::tasks
         {
             if (!m_shared_state)
             {
-                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::get() - result is empty.");
+                throw std::runtime_error("pot::lazy_task::get() - result is empty.");
             }
             m_shared_state->run();
             return m_shared_state->get();
@@ -75,12 +49,12 @@ namespace pot::tasks
         {
             if (!m_shared_state)
             {
-                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait() - result is empty.");
+                throw std::runtime_error("pot::lazy_task::wait() - result is empty.");
             }
             m_shared_state->run();
             if (!m_shared_state->is_ready())
             {
-                throw details::lazy_task_exception(details::lazy_task_error_code::empty_result, "pot::lazy_task::wait() - result is empty. Task is not ready.");
+                throw std::runtime_error("pot::lazy_task::wait() - result is empty. Task is not ready.");
             }
         }
 
@@ -89,7 +63,7 @@ namespace pot::tasks
         {
             if (!m_shared_state)
             {
-                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait_for() - result is empty.");
+                throw std::runtime_error("pot::lazy_task::wait_for() - result is empty.");
             }
             return m_shared_state->wait_for(timeout_duration);
         }
@@ -99,7 +73,7 @@ namespace pot::tasks
         {
             if (!m_shared_state)
             {
-                throw details::lazy_task_exception(details::lazy_task_error_code::lazy_task_failed, "pot::lazy_task::wait_until() - result is empty.");
+                throw std::runtime_error("pot::lazy_task::wait_until() - result is empty.");
             }
             return m_shared_state->wait_until(timeout_time);
         }
@@ -131,6 +105,10 @@ namespace pot::tasks
             {
                 m_shared_state->set_value(value);
             }
+            else
+            {
+                throw std::runtime_error("pot::lazy_promise::set_value() - no shared state available.");
+            }
         }
 
         void set_exception(std::exception_ptr exception)
@@ -138,6 +116,10 @@ namespace pot::tasks
             if (m_shared_state)
             {
                 m_shared_state->set_exception(exception);
+            }
+            else
+            {
+                throw std::runtime_error("pot::lazy_promise::set_exception() - no shared state available.");
             }
         }
 

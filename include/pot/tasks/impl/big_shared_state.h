@@ -11,29 +11,6 @@
 
 namespace pot::tasks::details
 {
-    enum class big_shared_state_error_code
-    {
-        empty_result,
-        promise_already_satisfied,
-        interrupted_task,
-        unknown_error
-    };
-
-    class big_shared_state_exception : public std::runtime_error
-    {
-    public:
-        big_shared_state_exception(big_shared_state_error_code code, const std::string &message)
-            : std::runtime_error(message), error_code(code) {}
-
-        big_shared_state_error_code code() const noexcept
-        {
-            return error_code;
-        }
-
-    private:
-        big_shared_state_error_code error_code;
-    };
-
     template <typename T>
     class big_shared_state
     {
@@ -46,7 +23,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw big_shared_state_exception(big_shared_state_error_code::promise_already_satisfied, "pot::tasks::details::big_shared_state::set_value() - value already set.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::set_value() - value already set.");
             }
 
             m_variant = value;
@@ -56,7 +33,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw big_shared_state_exception(big_shared_state_error_code::promise_already_satisfied, "pot::tasks::details::big_shared_state::set_value() - value already set.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::set_value() - value already set.");
             }
 
             m_variant = std::move(value);
@@ -66,7 +43,7 @@ namespace pot::tasks::details
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
-                throw big_shared_state_exception(big_shared_state_error_code::promise_already_satisfied, "pot::tasks::details::big_shared_state::set_exception() - exception already set.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::set_exception() - exception already set.");
             }
 
             m_variant = eptr;
@@ -81,7 +58,7 @@ namespace pot::tasks::details
             }
             if (std::holds_alternative<std::monostate>(m_variant))
             {
-                throw big_shared_state_exception(big_shared_state_error_code::empty_result, "No value set.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::get() - No value set.");
             }
             return std::get<T>(m_variant);
         }
@@ -99,7 +76,7 @@ namespace pot::tasks::details
             }
             if (m_interrupted.load())
             {
-                throw big_shared_state_exception(big_shared_state_error_code::interrupted_task, "pot::tasks::details::big_shared_state::wait() - task was interrupted.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::wait() - task was interrupted.");
             }
         }
 
@@ -122,7 +99,7 @@ namespace pot::tasks::details
             }
             if (m_interrupted.load())
             {
-                throw big_shared_state_exception(big_shared_state_error_code::interrupted_task, "pot::tasks::details::big_shared_state::wait_for() - task was cancelled.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::wait_for() - task was cancelled.");
             }
             return true;
         }
@@ -142,11 +119,11 @@ namespace pot::tasks::details
         {
             if (progress < 0 || progress > 100)
             {
-                throw big_shared_state_exception(big_shared_state_error_code::unknown_error, "pot::tasks::details::big_shared_state::set_progress() - progress value must be in the range of 0 to 100.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::set_progress() - progress value must be in the range of 0 to 100.");
             }
             if (m_interrupted.load())
             {
-                throw big_shared_state_exception(big_shared_state_error_code::interrupted_task, "pot::tasks::details::big_shared_state::set_progress() - task is interrupted. Can't set progress.");
+                throw std::runtime_error("pot::tasks::details::big_shared_state::set_progress() - task is interrupted. Can't set progress.");
             }
             m_progress.store(progress, std::memory_order_release);
         }
@@ -177,11 +154,6 @@ namespace pot::tasks::details
         }
 
     private:
-        std::atomic<bool> m_ready{false};
-        std::atomic<bool> m_interrupted{false};
-        std::atomic<int> m_progress{0};
-        std::atomic<bool> m_paused{false};
-
-        variant_type m_variant = std::monostate{};
-    };
-}
+        std::atomic<bool> m_ready {false};
+        std::atomic<bool> m_interrupted {false};
+       

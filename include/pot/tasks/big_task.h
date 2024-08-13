@@ -10,32 +10,6 @@
 
 namespace pot::tasks
 {
-    namespace details
-    {
-        enum class big_task_error_code
-        {
-            empty_result,
-            promise_already_satisfied,
-            interrupted_task,
-            unknown_error
-        };
-
-        class big_shared_task_exception : public std::runtime_error
-        {
-        public:
-            big_shared_task_exception(big_task_error_code code, const std::string &message)
-                : std::runtime_error(message), error_code(code) {}
-
-            big_task_error_code code() const noexcept
-            {
-                return error_code;
-            }
-
-        private:
-            big_task_error_code error_code;
-        };
-    }
-
     template <typename T>
     class big_task
     {
@@ -72,7 +46,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::get() - result is empty.");
+                throw std::runtime_error("pot::big_task::get() - result is empty.");
             }
             return m_state->get();
         }
@@ -81,7 +55,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::wait() - result is empty.");
+                throw std::runtime_error("pot::big_task::wait() - result is empty.");
             }
             m_state->wait();
         }
@@ -91,7 +65,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::wait_for() - result is empty.");
+                throw std::runtime_error("pot::big_task::wait_for() - result is empty.");
             }
             return m_state->wait_for(timeout_duration);
         }
@@ -101,7 +75,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::wait_until() - result is empty.");
+                throw std::runtime_error("pot::big_task::wait_until() - result is empty.");
             }
             return m_state->wait_until(timeout_time);
         }
@@ -110,7 +84,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::interrupt() - result is empty.");
+                throw std::runtime_error("pot::big_task::interrupt() - result is empty.");
             }
             m_state->interrupt();
         }
@@ -119,7 +93,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::is_interrupted() - result is empty.");
+                throw std::runtime_error("pot::big_task::is_interrupted() - result is empty.");
             }
             return m_state->is_interrupted();
         }
@@ -128,7 +102,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::set_progress() - result is empty.");
+                throw std::runtime_error("pot::big_task::set_progress() - result is empty.");
             }
             if (progress >= 0 && progress <= 100)
             {
@@ -144,7 +118,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::get_progress() - result is empty.");
+                throw std::runtime_error("pot::big_task::get_progress() - result is empty.");
             }
             return m_state->get_progress();
         }
@@ -153,7 +127,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::pause() - result is empty.");
+                throw std::runtime_error("pot::big_task::pause() - result is empty.");
             }
             m_state->pause();
         }
@@ -162,7 +136,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::empty_result, "pot::big_task::resume() - result is empty.");
+                throw std::runtime_error("pot::big_task::resume() - result is empty.");
             }
             m_state->resume();
         }
@@ -186,7 +160,7 @@ namespace pot::tasks
         {
             if (m_state->is_ready())
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::promise_already_satisfied, "pot::big_task_promise::set_value() - promise already satisfied.");
+                throw std::runtime_error("pot::big_task_promise::set_value() - promise already satisfied.");
             }
             m_state->set_value(std::move(value));
         }
@@ -195,7 +169,7 @@ namespace pot::tasks
         {
             if (m_state->is_ready())
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::promise_already_satisfied, "pot::big_task_promise::set_exception() - promise already satisfied.");
+                throw std::runtime_error("pot::big_task_promise::set_exception() - promise already satisfied.");
             }
             m_state->set_exception(std::move(e));
         }
@@ -204,7 +178,7 @@ namespace pot::tasks
         {
             if (m_state->is_ready())
             {
-                throw details::big_shared_task_exception(details::big_task_error_code::promise_already_satisfied, "Cannot set progress. Task is already completed.");
+                throw std::runtime_error("Cannot set progress. Task is already completed.");
             }
             m_state->set_progress(progress);
         }
@@ -228,6 +202,6 @@ namespace pot::tasks
         big_task_promise &operator=(const big_task_promise &) = delete;
 
     private:
-        std::shared_ptr<details::big_shared_state<T>> m_state = std::make_shared<details::big_shared_state<T>>();
+        std::shared_ptr<details::big_shared_state<T>> m_state{std::make_shared<details::big_shared_state<T>>()};
     };
 }

@@ -12,32 +12,6 @@
 
 namespace pot::tasks
 {
-    namespace details
-    {
-        enum class stack_error_code
-        {
-            value_already_set,
-            exception_already_set,
-            no_value_set,
-            unknown_error
-        };
-
-        class stack_exception : public std::runtime_error
-        {
-        public:
-            stack_exception(stack_error_code code, const std::string &message)
-                : std::runtime_error(message), error_code(code) {}
-
-            stack_error_code code() const noexcept
-            {
-                return error_code;
-            }
-
-        private:
-            stack_error_code error_code;
-        };
-    }
-
     template <typename T>
     class stack_task
     {
@@ -57,7 +31,7 @@ namespace pot::tasks
             }
             else
             {
-                throw details::stack_exception(details::stack_error_code::no_value_set, "pot::task::stack_task::get() - no value set.");
+                throw std::runtime_error("pot::stack_task::get() - no value set.");
             }
         }
 
@@ -100,7 +74,7 @@ namespace pot::tasks
         {
             if (m_ready.exchange(true))
             {
-                throw details::stack_exception(details::stack_error_code::value_already_set, "pot::tasks::stack_task::set_value() - value already set.");
+                throw std::runtime_error("pot::stack_task::set_value() - value already set.");
             }
             new (&m_value) T(value);
             m_has_value.store(true);
@@ -110,7 +84,7 @@ namespace pot::tasks
         {
             if (m_ready.exchange(true))
             {
-                throw details::stack_exception(details::stack_error_code::value_already_set, "pot::tasks::stack_task::set_value() - value already set.");
+                throw std::runtime_error("pot::stack_task::set_value() - value already set.");
             }
             new (&m_value) T(std::move(value));
             m_has_value.store(true);
@@ -120,7 +94,7 @@ namespace pot::tasks
         {
             if (m_ready.exchange(true))
             {
-                throw details::stack_exception(details::stack_error_code::exception_already_set, "pot::tasks::stack_task::set_exception - exception already set.");
+                throw std::runtime_error("pot::stack_task::set_exception() - exception already set.");
             }
             m_exception = eptr;
             m_has_exception.store(true);

@@ -9,31 +9,6 @@
 
 namespace pot::tasks
 {
-    namespace details
-    {
-        enum class task_error_code
-        {
-            empty_result,
-            value_already_set,
-            exception_already_set,
-        };
-
-        class task_exception : public std::runtime_error
-        {
-        public:
-            task_exception(task_error_code code, const std::string &message)
-                : std::runtime_error(message), error_code(code) {}
-
-            task_error_code code() const noexcept
-            {
-                return error_code;
-            }
-
-        private:
-            task_error_code error_code;
-        };
-    }
-
     template <typename T>
     class task
     {
@@ -61,7 +36,10 @@ namespace pot::tasks
 
         T get()
         {
-            throw_if_empty("Attempted to get value from an empty task.");
+            if (!m_state)
+            {
+                throw std::runtime_error("pot::tasks::task::get() - Attempted to get value from an empty task.");
+            }
             return m_state->get();
         }
 
@@ -69,7 +47,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::task_exception(details::task_error_code::empty_result, "pot::tasks::task::wait() - attempted to wait on an empty task.");
+                throw std::runtime_error("pot::tasks::task::wait() - attempted to wait on an empty task.");
             }
             m_state->wait();
         }
@@ -79,7 +57,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::task_exception(details::task_error_code::empty_result, "pot::tasks::task::wait_for() - attempted to wait_for on an empty task.");
+                throw std::runtime_error("pot::tasks::task::wait_for() - attempted to wait_for on an empty task.");
             }
             return m_state->wait_for(timeout_duration);
         }
@@ -89,21 +67,13 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw details::task_exception(details::task_error_code::empty_result, "pot::tasks::task::wait_until() - attempted to wait_until on an empty task.");
+                throw std::runtime_error("pot::tasks::task::wait_until() - attempted to wait_until on an empty task.");
             }
             return m_state->wait_until(timeout_time);
         }
 
     private:
         details::big_shared_state<T> *m_state;
-
-        void throw_if_empty(const char *message) const
-        {
-            if (!m_state)
-            {
-                throw details::task_exception(details::task_error_code::empty_result, message);
-            }
-        }
     };
 
     template <typename T, typename Allocator = std::allocator<T>>
@@ -137,7 +107,7 @@ namespace pot::tasks
             }
             else
             {
-                throw details::task_exception(details::task_error_code::value_already_set, "pot::tasks::promise::set_value() - state is empty; cannot set value.");
+                throw std::runtime_error("pot::tasks::promise::set_value() - state is empty; cannot set value.");
             }
         }
 
@@ -149,7 +119,7 @@ namespace pot::tasks
             }
             else
             {
-                throw details::task_exception(details::task_error_code::value_already_set, "pot::tasks::promise::set_value() - state is empty; cannot set value.");
+                throw std::runtime_error("pot::tasks::promise::set_value() - state is empty; cannot set value.");
             }
         }
 
@@ -161,7 +131,7 @@ namespace pot::tasks
             }
             else
             {
-                throw details::task_exception(details::task_error_code::exception_already_set, "pot::tasks::promise::set_exception() - state is empty; cannot set exception.");
+                throw std::runtime_error("pot::tasks::promise::set_exception() - state is empty; cannot set exception.");
             }
         }
 
