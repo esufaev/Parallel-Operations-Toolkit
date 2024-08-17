@@ -15,7 +15,7 @@ namespace pot::tasks
     public:
         task() noexcept = default;
         task(task &&rhs) noexcept = default;
-        task(details::big_shared_state<T> *state) : m_state(state) {}
+        task(details::shared_state<T> *state) : m_state(state) {}
 
         task &operator=(task &&rhs) noexcept
         {
@@ -73,7 +73,7 @@ namespace pot::tasks
         }
 
     private:
-        details::big_shared_state<T> *m_state;
+        details::shared_state<T> *m_state;
     };
 
     template <typename T, typename Allocator = std::allocator<T>>
@@ -135,25 +135,25 @@ namespace pot::tasks
             }
         }
 
-        details::big_shared_state<T> *get_state() const
+        details::shared_state<T> *get_state() const
         {
             return m_state;
         }
 
     private:
-        details::big_shared_state<T> *allocate_shared_state()
+        details::shared_state<T> *allocate_shared_state()
         {
             auto ptr = m_allocator.allocate(1);
-            return new (ptr) details::big_shared_state<T>();
+            return new (ptr) details::shared_state<T>();
         }
 
-        void deallocate_shared_state(details::big_shared_state<T> *state)
+        void deallocate_shared_state(details::shared_state<T> *state)
         {
-            state->~big_shared_state();
+            state->~shared_state();
             m_allocator.deallocate(state, 1);
         }
 
         Allocator m_allocator;
-        details::big_shared_state<T> *m_state;
+        details::shared_state<T> *m_state;
     };
 }
