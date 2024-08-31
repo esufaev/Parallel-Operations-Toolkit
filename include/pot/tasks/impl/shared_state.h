@@ -4,8 +4,13 @@
 #include <exception>
 #include <chrono>
 #include <variant>
+#include <functional>
 #include <stdexcept>
 #include <string>
+#include <vector>
+#include <algorithm>
+
+#include <iostream>
 
 #include "pot/this_thread.h"
 
@@ -16,8 +21,9 @@ namespace pot::tasks::details
     {
     public:
         using variant_type = std::variant<std::monostate, T, std::exception_ptr>;
+        using completion_callback = std::function<void()>;
 
-        shared_state() {}
+        shared_state() = default;
 
         void set_value(const T &value)
         {
@@ -27,6 +33,7 @@ namespace pot::tasks::details
             }
 
             m_variant = value;
+            notify_completion();
         }
 
         void set_value(T &&value)
@@ -37,6 +44,7 @@ namespace pot::tasks::details
             }
 
             m_variant = std::move(value);
+            notify_completion();
         }
 
         void set_exception(std::exception_ptr eptr)
@@ -47,6 +55,7 @@ namespace pot::tasks::details
             }
 
             m_variant = eptr;
+            notify_completion();
         }
 
         T get()
@@ -97,8 +106,33 @@ namespace pot::tasks::details
             return m_ready.load();
         }
 
+        void on_completion(completion_callback callback)
+        {
+            if (is_ready())
+            {
+                callback();
+            }
+            else
+            {
+                m_callbacks.push_back(std::move(callback));
+            }
+        }
+
     private:
-        std::atomic<bool> m_ready {false};
-        variant_type m_variant {std::monostate{}};
+        void notify_completion()
+        {
+            if (!m_ready.exchange(true, std::memory_order_acq_rel)) 
+            {
+                for (auto &callback : m_callbacks)
+                {
+                    callback();
+                }
+                m_callbacks.clear();
+            }
+        }
+
+        std::atomic<bool> m_ready{false};
+        variant_type m_variant{std::monostate{}};
+        std::vector<completion_callback> m_callbacks;
     };
 }

@@ -4,6 +4,8 @@
 #include <chrono>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <functional>
 
 #include "pot/tasks/impl/shared_state.h"
 
@@ -15,7 +17,7 @@ namespace pot::tasks
     public:
         task() noexcept = default;
         task(task &&rhs) noexcept = default;
-        task(details::shared_state<T> *state) : m_state(state) {}
+        explicit task(std::shared_ptr<details::shared_state<T>> state) : m_state(std::move(state)) {}
 
         task &operator=(task &&rhs) noexcept
         {
@@ -47,7 +49,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw std::runtime_error("pot::tasks::task::wait() - attempted to wait on an empty task.");
+                throw std::runtime_error("pot::tasks::task::wait() - Attempted to wait on an empty task.");
             }
             m_state->wait();
         }
@@ -57,7 +59,7 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw std::runtime_error("pot::tasks::task::wait_for() - attempted to wait_for on an empty task.");
+                throw std::runtime_error("pot::tasks::task::wait_for() - Attempted to wait_for on an empty task.");
             }
             return m_state->wait_for(timeout_duration);
         }
@@ -67,13 +69,30 @@ namespace pot::tasks
         {
             if (!m_state)
             {
-                throw std::runtime_error("pot::tasks::task::wait_until() - attempted to wait_until on an empty task.");
+                throw std::runtime_error("pot::tasks::task::wait_until() - Attempted to wait_until on an empty task.");
             }
             return m_state->wait_until(timeout_time);
         }
 
+        bool is_ready() const noexcept
+        {
+            return m_state->is_ready();
+        }
+
+        void on_completion(details::shared_state<T>::completion_callback callback) const
+        {
+            if (m_state)
+            {
+                m_state->on_completion(std::move(callback));
+            }
+            else
+            {
+                throw std::runtime_error("pot::tasks::task::on_completion() - Attempted to register a callback on an empty task.");
+            }
+        }
+
     private:
-        details::shared_state<T> *m_state;
+        std::shared_ptr<details::shared_state<T>> m_state;
     };
 
     template <typename T, typename Allocator = std::allocator<T>>
@@ -83,15 +102,7 @@ namespace pot::tasks
         explicit promise(const Allocator &alloc = Allocator())
             : m_allocator(alloc)
         {
-            m_state = allocate_shared_state();
-        }
-
-        ~promise()
-        {
-            if (m_state)
-            {
-                deallocate_shared_state(m_state);
-            }
+            m_state = std::allocate_shared<details::shared_state<T>>(m_allocator);
         }
 
         task<T> get_future()
@@ -135,25 +146,8 @@ namespace pot::tasks
             }
         }
 
-        details::shared_state<T> *get_state() const
-        {
-            return m_state;
-        }
-
     private:
-        details::shared_state<T> *allocate_shared_state()
-        {
-            auto ptr = m_allocator.allocate(1);
-            return new (ptr) details::shared_state<T>();
-        }
-
-        void deallocate_shared_state(details::shared_state<T> *state)
-        {
-            state->~shared_state();
-            m_allocator.deallocate(state, 1);
-        }
-
         Allocator m_allocator;
-        details::shared_state<T> *m_state;
+        std::shared_ptr<details::shared_state<T>> m_state;
     };
 }

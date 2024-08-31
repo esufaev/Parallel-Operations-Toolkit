@@ -65,10 +65,12 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/tasks/lazy_task.h
     include/${PROJECT_NAME}/tasks/big_task.h
 
-
     include/${PROJECT_NAME}/tasks/impl/shared_state.h
     include/${PROJECT_NAME}/tasks/impl/lazy_shared_state.h
     include/${PROJECT_NAME}/tasks/impl/big_shared_state.h
+
+    include/${PROJECT_NAME}/coroutines/coroutine.h
+    include/${PROJECT_NAME}/coroutines/task_coroutine.h
 )
 
 set(POT_SOURCES
