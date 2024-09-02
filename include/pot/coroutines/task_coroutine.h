@@ -8,10 +8,11 @@
 #include <functional>
 #include <coroutine>
 #include <optional>
+#include <source_location>
 
 #include "pot/tasks/impl/shared_state.h"
 
-namespace pot::tasks
+namespace pot::coroutines
 {
     template <typename T>
     class task
@@ -20,10 +21,13 @@ namespace pot::tasks
         struct promise_type;
         using handle_type = std::coroutine_handle<promise_type>;
 
-        task(handle_type h) noexcept : m_handle(h) {}
-        task(task&& rhs) noexcept : m_handle(std::exchange(rhs.m_handle, nullptr)) {}
-        
-        task& operator=(task&& rhs) noexcept
+        task(handle_type h) noexcept 
+            : m_handle(h) {}
+
+        task(task &&rhs) noexcept 
+            : m_handle(std::exchange(rhs.m_handle, nullptr)) {}
+
+        task &operator=(task &&rhs) noexcept
         {
             if (this != &rhs)
             {
@@ -40,8 +44,8 @@ namespace pot::tasks
                 m_handle.destroy();
         }
 
-        task(const task&) = delete;
-        task& operator=(const task&) = delete;
+        task(const task &) = delete;
+        task &operator=(const task &) = delete;
 
         explicit operator bool() const noexcept
         {
@@ -62,14 +66,14 @@ namespace pot::tasks
         }
 
         template <typename Rep, typename Period>
-        bool wait_for(const std::chrono::duration<Rep, Period>& timeout_duration)
+        bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
             ensure_handle();
             return m_handle.promise().m_state->wait_for(timeout_duration);
         }
 
         template <typename Clock, typename Duration>
-        bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time)
+        bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
         {
             ensure_handle();
             return m_handle.promise().m_state->wait_until(timeout_time);
@@ -80,12 +84,6 @@ namespace pot::tasks
             return m_handle && m_handle.promise().m_state->is_ready();
         }
 
-        void on_completion(typename details::shared_state<T>::completion_callback callback) const
-        {
-            ensure_handle();
-            m_handle.promise().m_state->on_completion(std::move(callback));
-        }
-
         bool await_ready() const noexcept
         {
             return m_handle.promise().m_state->is_ready();
@@ -93,7 +91,8 @@ namespace pot::tasks
 
         void await_suspend(std::coroutine_handle<> h) const
         {
-            m_handle.promise().m_state->on_completion([h]() { h.resume(); });
+            m_handle.promise().m_state->wait();
+            h.resume();
         }
 
         T await_resume()
@@ -108,22 +107,24 @@ namespace pot::tasks
                 m_handle.resume();
                 return m_handle.promise().get_value();
             }
-            throw std::runtime_error("pot::tasks::task::next() - Task completed, no more values.");
+            throw std::runtime_error(
+                std::string(std::source_location::current().function_name()) + " - Task completed, no more values.");
         }
 
     private:
         handle_type m_handle;
 
-        void ensure_handle() const
+        void ensure_handle(std::source_location location = std::source_location::current()) const
         {
             if (!m_handle)
-                throw std::runtime_error("pot::tasks::task::esure_handle() - Attempted to use an empty task.");
+                throw std::runtime_error(
+                    std::string(location.function_name()) + " - Attempted to use an empty task.");
         }
 
     public:
         struct promise_type
         {
-            std::shared_ptr<details::shared_state<T>> m_state = std::make_shared<details::shared_state<T>>();
+            std::shared_ptr<pot::tasks::details::shared_state<T>> m_state = std::make_shared<pot::tasks::details::shared_state<T>>();
             std::optional<T> current_value;
 
             task get_return_object()
@@ -156,7 +157,6 @@ namespace pot::tasks
             }
         };
     };
-
     template <typename T>
     class promise
     {
