@@ -63,7 +63,7 @@ namespace pot::coroutines
         void wait()
         {
             ensure_handle();
-            m_executor->run([state = m_handle.promise().m_state]()
+            m_executor->run_detached([state = m_handle.promise().m_state]()
             { 
                 state->wait(); 
             }).get();
@@ -109,7 +109,6 @@ namespace pot::coroutines
             }
             else
             {
-                m_handle.promise().m_state->wait();
                 h.resume();
             }
         }
