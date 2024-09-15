@@ -1,64 +1,59 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_approx.hpp>
-
+#include <iostream>
+#include <vector>
+#include <cassert>
+#include <coroutine>
 #include <thread>
 #include <chrono>
-#include <iostream>
-#include <atomic>
+#include <mutex>
 
-#include "pot/coroutines/task_coroutine.h"
+#include "pot/executors/thread_pool_executor.h"
+#include "pot/algorithms/parfor.h"
 
-using namespace pot::tasks;
-
-task<int> simple_task()
+void example_function(int i)
 {
-    co_return 42;
+    std::cout << "Processing " << i << " in thread " << std::this_thread::get_id() << std::endl;
 }
 
-task<int> async_addition(int a, int b)
+pot::coroutines::task<int> test_parfor()
 {
-    co_return a + b;
+    std::cout << "Starting test_parfor..." << std::endl;
+
+    pot::executors::thread_pool_executor_gq executor("Test Thread Pool");
+
+    const int from = 0;
+    const int to = 10;
+
+    std::vector<int> results(to - from, -1);
+
+    std::mutex mtx;
+
+    auto fill_results = [&results, &mtx](int i)
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        results[i] = i;
+        std::cout << "Processed index " << i << " in thread " << std::this_thread::get_id() << std::endl;
+    };
+
+    std::cout << "Calling parfor..." << std::endl;
+    co_await pot::algorithms::parfor(executor, from, to, fill_results);
+    std::cout << "parfor completed." << std::endl;
+
+    for (int i = from; i < to; ++i)
+    {
+        REQUIRE(results[i] == i);
+        std::cout << "Verified index " << i << " with value " << results[i] << std::endl;
+    }
+
+    std::cout << "parfor test passed!" << std::endl;
+
+    co_return 0;
 }
 
-task<int> compute_sum()
+TEST_CASE("pot::bench_coroutines_executor")
 {
-    int result = co_await async_addition(10, 32);
-    co_return result;
-}
-
-task<int> generate_numbers()
-{
-    co_yield 1;
-    co_yield 2;
-    co_yield 3;
-    co_return 0; 
-}
-
-TEST_CASE("simple_task returns correct value")
-{
-    auto t = simple_task();
-
-    REQUIRE(t.get() == 42);
-    REQUIRE(t.is_ready() == true);
-}
-
-TEST_CASE("co_await with task works correctly")
-{
-    auto t = compute_sum();
-    
-    REQUIRE(t.get() == 42);
-    REQUIRE(t.is_ready() == true); 
-}
-
-TEST_CASE("co_yield works correctly in task")
-{
-    auto t = generate_numbers();
-    std::vector<int> results;
-
-    results.push_back(t.next());
-    results.push_back(t.next());
-    results.push_back(t.next());
-    std::cout << "Result: " << t.get() << std::endl;
-
-    // REQUIRE(results == std::vector<int>{1, 2, 3});
+    std::cout << "Starting test case..." << std::endl;
+    auto task = test_parfor();
+    task.get();
+    std::cout << "Test case completed." << std::endl;
 }

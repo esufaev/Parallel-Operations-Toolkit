@@ -53,7 +53,6 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/executors/thread_executor.h
     include/${PROJECT_NAME}/executors/thread_pool_executor.h
 
-    include/${PROJECT_NAME}/experimental/parfor.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_gq_esu.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_lq_esu.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_fpe.h
@@ -71,6 +70,10 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/coroutines/coroutine.h
     include/${PROJECT_NAME}/coroutines/task_coroutine.h
+
+    include/${PROJECT_NAME}/coroutines/task_coroutine.h
+    include/${PROJECT_NAME}/algorithms/parfor.h
+
 )
 
 set(POT_SOURCES

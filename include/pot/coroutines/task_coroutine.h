@@ -7,6 +7,7 @@
 #include <utility>
 #include <source_location>
 #include <chrono>
+#include <type_traits>
 
 #include "pot/tasks/impl/shared_state.h"
 #include "pot/executors/thread_pool_executor.h"
@@ -52,28 +53,36 @@ namespace pot::coroutines
             return m_handle && !m_handle.done();
         }
 
-        T get()
+        auto get()
         {
             ensure_handle();
-            auto future_result = m_executor->run([state = m_handle.promise().m_state]()
-                                                 { return state->get(); });
-            return future_result.get();
+            if constexpr (std::is_void_v<T>)
+            {
+                auto future_result = m_executor->run([state = m_handle.promise().m_state]()
+                                                     { state->get(); });
+                future_result.get();
+            }
+            else
+            {
+                auto future_result = m_executor->run([state = m_handle.promise().m_state]()
+                                                     { return state->get(); });
+                return future_result.get();
+            }
         }
 
         void wait()
         {
             ensure_handle();
-            m_executor->run_detached([state = m_handle.promise().m_state]()
-            { 
-                state->wait(); 
-            }).get();
+            m_executor->run([state = m_handle.promise().m_state]()
+                            { state->wait(); })
+                .get();
         }
 
         template <typename Rep, typename Period>
         bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
             ensure_handle();
-            auto future_result = m_executor->run([state = m_handle.promise().m_state(), &timeout_duration]()
+            auto future_result = m_executor->run([state = m_handle.promise().m_state, timeout_duration]()
                                                  { return state->wait_for(timeout_duration); });
             return future_result.get();
         }
@@ -82,7 +91,7 @@ namespace pot::coroutines
         bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
         {
             ensure_handle();
-            auto future_result = m_executor->run([state = m_handle.promise().m_state(), &timeout_time]()
+            auto future_result = m_executor->run([state = m_handle.promise().m_state, timeout_time]()
                                                  { return state->wait_until(timeout_time); });
             return future_result.get();
         }
@@ -113,9 +122,16 @@ namespace pot::coroutines
             }
         }
 
-        T await_resume()
+        auto await_resume()
         {
-            return get();
+            if constexpr (!std::is_void_v<T>)
+            {
+                return get();
+            }
+            else
+            {
+                get();
+            }
         }
 
         T next()
@@ -137,35 +153,17 @@ namespace pot::coroutines
             m_executor = std::move(exec);
         }
 
-    private:
-        handle_type m_handle;
-        std::shared_ptr<pot::executor> m_executor;
-
-        void ensure_handle(std::source_location location = std::source_location::current()) const
-        {
-            if (!m_handle)
-                throw std::runtime_error(std::string(location.function_name()) + " - Attempted to use an empty task.");
-        }
-
-    public:
         struct promise_type
         {
             std::shared_ptr<pot::tasks::details::shared_state<T>> m_state = std::make_shared<pot::tasks::details::shared_state<T>>();
-            std::optional<T> current_value;
 
-            task get_return_object()
+            task<T> get_return_object()
             {
-                return task{handle_type::from_promise(*this)};
+                return task<T>{handle_type::from_promise(*this)};
             }
 
             std::suspend_never initial_suspend() noexcept { return {}; }
             std::suspend_always final_suspend() noexcept { return {}; }
-
-            std::suspend_always yield_value(T value) noexcept
-            {
-                current_value = std::move(value);
-                return {};
-            }
 
             void return_value(T value)
             {
@@ -181,39 +179,42 @@ namespace pot::coroutines
             {
                 return *current_value;
             }
+
+            std::optional<T> current_value;
         };
-    };
-
-    template <typename T>
-    class promise
-    {
-    public:
-        promise() : m_state(std::make_shared<pot::tasks::details::shared_state<T>>()) {}
-
-        [[nodiscard]] task<T> get_future()
-        {
-            return task<T>{m_state};
-        }
-
-        void set_value(T value)
-        {
-            ensure_state();
-            m_state->set_value(std::move(value));
-        }
-
-        void set_exception(std::exception_ptr eptr)
-        {
-            ensure_state();
-            m_state->set_exception(eptr);
-        }
 
     private:
-        std::shared_ptr<pot::tasks::details::shared_state<T>> m_state;
+        handle_type m_handle;
+        std::shared_ptr<pot::executor> m_executor;
 
-        void ensure_state(std::source_location location = std::source_location::current()) const
+        void ensure_handle(std::source_location location = std::source_location::current()) const
         {
-            if (!m_state)
-                throw std::runtime_error(std::string(location.function_name()) + " - state is empty; cannot set value/exception.");
+            if (!m_handle)
+                throw std::runtime_error(std::string(location.function_name()) + " - Attempted to use an empty task.");
+        }
+    };
+
+    template <>
+    struct task<void>::promise_type
+    {
+        std::shared_ptr<pot::tasks::details::shared_state<void>> m_state = std::make_shared<pot::tasks::details::shared_state<void>>();
+
+        task<void> get_return_object()
+        {
+            return task<void>{handle_type::from_promise(*this)};
+        }
+
+        std::suspend_never initial_suspend() noexcept { return {}; }
+        std::suspend_always final_suspend() noexcept { return {}; }
+
+        void return_void()
+        {
+            m_state->set_value();
+        }
+
+        void unhandled_exception()
+        {
+            m_state->set_exception(std::current_exception());
         }
     };
 }

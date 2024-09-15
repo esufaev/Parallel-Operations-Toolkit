@@ -1,21 +1,26 @@
 #pragma once
 
+#include "pot/coroutines/task_coroutine.h"
+#include <iterator>
+#include <vector>
+
 namespace pot
 {
-
-    template<typename Iterator>
-    void when_all(Iterator begin, Iterator end)
-        requires std::forward_iterator<Iterator> &&
-            requires(typename std::iterator_traits<Iterator>::value_type future) { future.get(); }
+    template <typename Iterator>
+    pot::coroutines::task<void> when_all(Iterator begin, Iterator end)
+        requires std::forward_iterator<Iterator>
     {
         for (auto it = begin; it != end; ++it)
-            (*it).get();
+        {
+            co_await std::move(*it);
+        }
+
+        co_return;
     }
 
-    template<template<class, class... > class Container, typename FutureType, typename... OtherTypes>
-    void when_all(Container<FutureType, OtherTypes...>& futures)
-        requires requires(FutureType& future) { future.get(); }
+    template <template <class, class...> class Container, typename FutureType, typename... OtherTypes>
+    pot::coroutines::task<void> when_all(Container<FutureType, OtherTypes...> &futures)
     {
-        return when_all(std::begin(futures), std::end(futures));
+        co_await when_all(std::begin(futures), std::end(futures));
     }
-}
+} // namespace pot
