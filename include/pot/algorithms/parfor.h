@@ -15,12 +15,12 @@
 namespace pot::algorithms
 {
     template <int64_t static_chunk_size = -1, typename IndexType, typename FuncType = void(IndexType)>
-    requires std::invocable<FuncType, IndexType>
-    pot::coroutines::task<void> parfor(pot::executors::thread_pool_executor_gq &executor, IndexType from, IndexType to, FuncType &&func)
+        requires std::invocable<FuncType, IndexType>
+    pot::coroutines::task<void> parfor(pot::executor &executor, IndexType from, IndexType to, FuncType &&func)
     {
         assert(from < to);
 
-        const int64_t numIterations = to - from;
+        const int64_t numIterations = to - from + 1;
         int64_t chunk_size = static_chunk_size;
 
         if (chunk_size < 0)
@@ -35,14 +35,13 @@ namespace pot::algorithms
             const IndexType chunkStart = from + IndexType(chunkIndex * chunk_size);
             const IndexType chunkEnd = std::min<IndexType>(chunkStart + chunk_size, to);
 
-            tasks.push_back([chunkStart, chunkEnd, &func, &executor]() -> pot::coroutines::task<void>
+            tasks.push_back([chunkStart, chunkEnd, func = std::forward<FuncType>(func), &executor]() -> pot::coroutines::task<void>
             {
                 for (IndexType i = chunkStart; i < chunkEnd; ++i)
                 {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    executor.run_detached([&func, i]() { func(i); });
+                    executor.run_detached([func, i]() { func(i); });
                 }
-                co_return;
+                co_return; 
             }());
         }
 

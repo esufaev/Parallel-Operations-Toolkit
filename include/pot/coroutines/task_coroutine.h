@@ -10,7 +10,6 @@
 #include <type_traits>
 
 #include "pot/tasks/impl/shared_state.h"
-#include "pot/executors/thread_pool_executor.h"
 
 namespace pot::coroutines
 {
@@ -21,11 +20,11 @@ namespace pot::coroutines
         struct promise_type;
         using handle_type = std::coroutine_handle<promise_type>;
 
-        task(handle_type h, std::shared_ptr<pot::executor> exec = std::make_shared<pot::executors::thread_pool_executor_gq>("Default Thread Pool With GQ")) noexcept
-            : m_handle(h), m_executor(std::move(exec)) {}
+        task(handle_type h) noexcept
+            : m_handle(h) {}
 
         task(task &&rhs) noexcept
-            : m_handle(std::exchange(rhs.m_handle, nullptr)), m_executor(std::move(rhs.m_executor)) {}
+            : m_handle(std::exchange(rhs.m_handle, nullptr)) {}
 
         task &operator=(task &&rhs) noexcept
         {
@@ -34,7 +33,6 @@ namespace pot::coroutines
                 if (m_handle)
                     m_handle.destroy();
                 m_handle = std::exchange(rhs.m_handle, nullptr);
-                m_executor = std::move(rhs.m_executor);
             }
             return *this;
         }
@@ -58,50 +56,38 @@ namespace pot::coroutines
             ensure_handle();
             if constexpr (std::is_void_v<T>)
             {
-                auto future_result = m_executor->run([state = m_handle.promise().m_state]()
-                                                     { state->get(); });
-                future_result.get();
+                m_handle.promise().m_state->get();
             }
             else
             {
-                auto future_result = m_executor->run([state = m_handle.promise().m_state]()
-                                                     { return state->get(); });
-                return future_result.get();
+                return m_handle.promise().m_state->get();
             }
         }
 
         void wait()
         {
             ensure_handle();
-            m_executor->run([state = m_handle.promise().m_state]()
-                            { state->wait(); })
-                .get();
+            m_handle.promise().m_state->wait();
         }
 
         template <typename Rep, typename Period>
         bool wait_for(const std::chrono::duration<Rep, Period> &timeout_duration)
         {
             ensure_handle();
-            auto future_result = m_executor->run([state = m_handle.promise().m_state, timeout_duration]()
-                                                 { return state->wait_for(timeout_duration); });
-            return future_result.get();
+            return m_handle.promise().m_state->wait_for(timeout_duration);
         }
 
         template <typename Clock, typename Duration>
         bool wait_until(const std::chrono::time_point<Clock, Duration> &timeout_time)
         {
             ensure_handle();
-            auto future_result = m_executor->run([state = m_handle.promise().m_state, timeout_time]()
-                                                 { return state->wait_until(timeout_time); });
-            return future_result.get();
+            return m_handle.promise().m_state->wait_until(timeout_time);
         }
 
         bool is_ready() const noexcept
         {
             ensure_handle();
-            auto future_result = m_executor->run([state = m_handle.promise().m_state]()
-                                                 { return state->is_ready(); });
-            return future_result.get();
+            return m_handle.promise().m_state->is_ready();
         }
 
         bool await_ready() const noexcept
@@ -111,15 +97,7 @@ namespace pot::coroutines
 
         void await_suspend(std::coroutine_handle<> h) const
         {
-            if (m_executor)
-            {
-                m_executor->run_detached([h]()
-                                         { h.resume(); });
-            }
-            else
-            {
-                h.resume();
-            }
+            h.resume();
         }
 
         auto await_resume()
@@ -139,18 +117,10 @@ namespace pot::coroutines
             ensure_handle();
             if (m_handle && !m_handle.done())
             {
-                auto future_result = m_executor->run([this]()
-                                                     {
-                    m_handle.resume();
-                    return m_handle.promise().get_value(); });
-                return future_result.get();
+                m_handle.resume();
+                return m_handle.promise().get_value();
             }
             throw std::runtime_error(std::string(std::source_location::current().function_name()) + " - Task completed, no more values.");
-        }
-
-        void set_executor(std::shared_ptr<pot::executor> exec)
-        {
-            m_executor = std::move(exec);
         }
 
         struct promise_type
@@ -185,7 +155,6 @@ namespace pot::coroutines
 
     private:
         handle_type m_handle;
-        std::shared_ptr<pot::executor> m_executor;
 
         void ensure_handle(std::source_location location = std::source_location::current()) const
         {

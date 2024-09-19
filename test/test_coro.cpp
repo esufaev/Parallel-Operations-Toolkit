@@ -15,7 +15,7 @@ void example_function(int i)
     std::cout << "Processing " << i << " in thread " << std::this_thread::get_id() << std::endl;
 }
 
-pot::coroutines::task<int> test_parfor()
+pot::coroutines::task<void> test_parfor()
 {
     std::cout << "Starting test_parfor..." << std::endl;
 
@@ -47,13 +47,20 @@ pot::coroutines::task<int> test_parfor()
 
     std::cout << "parfor test passed!" << std::endl;
 
-    co_return 0;
+    co_return;
 }
+
+pot::coroutines::task<void> func()
+{
+    pot::coroutines::task<void> task = test_parfor();
+    co_return co_await task;
+}
+
 
 TEST_CASE("pot::bench_coroutines_executor")
 {
     std::cout << "Starting test case..." << std::endl;
-    auto task = test_parfor();
-    task.get();
+    auto task = func();
+    task.wait();
     std::cout << "Test case completed." << std::endl;
 }

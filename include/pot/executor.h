@@ -75,5 +75,7 @@ namespace pot
 
         virtual void shutdown() = 0;
 
+        [[nodiscard]] virtual size_t thread_count() const { return 1; }
+
     };
 }
