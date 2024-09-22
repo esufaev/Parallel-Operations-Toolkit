@@ -33,7 +33,7 @@ namespace pot::algorithms
         for (int64_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex)
         {
             const IndexType chunkStart = from + IndexType(chunkIndex * chunk_size);
-            const IndexType chunkEnd = std::min<IndexType>(chunkStart + chunk_size, to);
+            const IndexType chunkEnd = std::min<IndexType>(chunkStart + IndexType(chunk_size), to);
 
             tasks.push_back([chunkStart, chunkEnd, &func, &executor]() -> pot::coroutines::task<void>
             {
