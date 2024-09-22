@@ -4,6 +4,7 @@
 #include <iterator>
 #include <vector>
 
+#include <iostream>
 namespace pot
 {
     template <typename Iterator>
@@ -21,6 +22,6 @@ namespace pot
     template <template <class, class...> class Container, typename FutureType, typename... OtherTypes>
     pot::coroutines::task<void> when_all(Container<FutureType, OtherTypes...> &futures)
     {
-        co_await when_all(std::begin(futures), std::end(futures));
+        co_return co_await when_all(std::begin(futures), std::end(futures));
     }
 } // namespace pot

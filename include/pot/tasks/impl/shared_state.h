@@ -12,8 +12,6 @@
 #include <iostream>
 #include <type_traits>
 
-#include "pot/this_thread.h"
-
 namespace pot::tasks::details
 {
     template <typename T>
@@ -102,7 +100,7 @@ namespace pot::tasks::details
         {
             while (!m_ready.load(std::memory_order_acquire))
             {
-                pot::this_thread::sleep_for(std::chrono::milliseconds(1));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
 
@@ -116,7 +114,7 @@ namespace pot::tasks::details
                 {
                     return false;
                 }
-                pot::this_thread::sleep_for(std::chrono::milliseconds(1));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             return true;
         }

@@ -30,6 +30,7 @@ pot::coroutines::task<void> test_parfor()
 
     auto fill_results = [&results, &mtx](int i)
     {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         std::lock_guard<std::mutex> lock(mtx);
         results[i] = i;
         std::cout << "Processed index " << i << " in thread " << std::this_thread::get_id() << std::endl;

@@ -33,20 +33,15 @@ namespace pot::algorithms
         for (int64_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex)
         {
             const IndexType chunkStart = from + IndexType(chunkIndex * chunk_size);
-            const IndexType chunkEnd = std::min<IndexType>(chunkStart + chunk_size, to);
+            const IndexType chunkEnd = std::min<IndexType>(chunkStart + IndexType(chunk_size), to);
 
-            tasks.push_back([chunkStart, chunkEnd, func = std::forward<FuncType>(func), &executor]() -> pot::coroutines::task<void>
+            tasks.push_back(executor.run([chunkStart, chunkEnd, &func, &executor]()
             {
                 for (IndexType i = chunkStart; i < chunkEnd; ++i)
-                {
-                    executor.run_detached([func, i]() { func(i); });
-                }
-                co_return; 
-            }());
+                    func(i);
+            }));
         }
 
-        co_await pot::when_all(tasks.begin(), tasks.end());
-
-        co_return;
+        co_return co_await pot::when_all(tasks.begin(), tasks.end());;
     }
 }

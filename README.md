@@ -1,3 +1,3 @@
-# thread_pool
+# Parallel-Operations-Toolkit
 
-The project is intended for conducting experiments related to the distribution of tasks and the organization of a thread pool.
+The project is designed to implement parallel algorithms.
