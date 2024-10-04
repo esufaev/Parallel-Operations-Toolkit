@@ -42,6 +42,6 @@ namespace pot::algorithms
             }));
         }
 
-        co_return co_await pot::when_all(tasks.begin(), tasks.end());;
+        co_return co_await pot::when_all(tasks.begin(), tasks.end());
     }
 }

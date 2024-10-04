@@ -5,9 +5,9 @@
 #include <atomic>
 #include <memory>
 
-#include "../global_thread.h"
-#include "../local_thread.h"
-#include "../executor.h"
+#include "pot/global_thread.h"
+#include "pot/local_thread.h"
+#include "pot/executor.h"
 
 namespace pot::executors
 {

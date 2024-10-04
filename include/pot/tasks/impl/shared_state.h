@@ -24,6 +24,22 @@ namespace pot::tasks::details
 
         shared_state() = default;
 
+        shared_state(const shared_state& other)
+        {
+            m_variant = other.m_variant;
+            m_ready.store(other.m_ready.load(std::memory_order_acquire), std::memory_order_release);
+        }
+
+        shared_state& operator=(const shared_state& other)
+        {
+            if (this != &other)
+            {
+                m_variant = other.m_variant;
+                m_ready.store(other.m_ready.load(std::memory_order_acquire), std::memory_order_release);
+            }
+            return *this;
+        }
+
         template <typename U = T, typename = std::enable_if_t<!std::is_void_v<U>>>
         void set_value(const U& value)
         {
