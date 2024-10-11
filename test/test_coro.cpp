@@ -5,63 +5,42 @@
 #include <coroutine>
 #include <thread>
 #include <chrono>
-#include <mutex>
 
 #include "pot/executors/thread_pool_executor.h"
 #include "pot/algorithms/parfor.h"
 
-void example_function(int i)
+pot::coroutines::task<void> test_nested_parfor(pot::executor &executor)
 {
-    std::cout << "Processing " << i << " in thread " << std::this_thread::get_id() << std::endl;
-}
+    const int outer_from = 0, outer_to = 10;
+    const int inner_from = 0, inner_to = 10;
 
-pot::coroutines::task<void> test_parfor()
-{
-    std::cout << "Starting test_parfor..." << std::endl;
+    std::vector<std::vector<int>> results(outer_to - outer_from, std::vector<int>(inner_to - inner_from, 0));
 
-    pot::executors::thread_pool_executor_gq executor("Test Thread Pool");
-
-    const int from = 0;
-    const int to = 10;
-
-    std::vector<int> results(to - from, -1);
-
-    std::mutex mtx;
-
-    auto fill_results = [&results, &mtx](int i)
+    co_await pot::algorithms::parfor(executor, outer_from, outer_to, [&](int outer_index) -> pot::coroutines::task<void>
     {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        std::lock_guard<std::mutex> lock(mtx);
-        results[i] = i;
-        std::cout << "Processed index " << i << " in thread " << std::this_thread::get_id() << std::endl;
-    };
+        co_await pot::algorithms::parfor(executor, inner_from, inner_to, [&](int inner_index)
+        {
+            results[outer_index][inner_index]++;
+        });
+    });
 
-    std::cout << "Calling parfor..." << std::endl;
-    co_await pot::algorithms::parfor(executor, from, to, fill_results);
-    std::cout << "parfor completed." << std::endl;
-
-    for (int i = from; i < to; ++i)
+    for (int i = outer_from; i < outer_to; ++i)
     {
-        REQUIRE(results[i] == i);
-        std::cout << "Verified index " << i << " with value " << results[i] << std::endl;
+        for (int j = inner_from; j < inner_to; ++j)
+        {
+            assert(results[i][j] == 1);
+        }
     }
 
-    std::cout << "parfor test passed!" << std::endl;
-
-    co_return;
+    std::cout << "Nested parfor test passed!" << std::endl;
 }
 
-pot::coroutines::task<void> func()
+TEST_CASE("pot::bench_nested_coroutines_executor")
 {
-    pot::coroutines::task<void> task = test_parfor();
-    co_return co_await task;
-}
+    pot::executors::thread_pool_executor_gq executor("Main", 4);
 
+    auto test_task = test_nested_parfor(executor);
+    test_task.wait();
 
-TEST_CASE("pot::bench_coroutines_executor")
-{
-    std::cout << "Starting test case..." << std::endl;
-    auto task = func();
-    task.wait();
-    std::cout << "Test case completed." << std::endl;
+    executor.shutdown();
 }

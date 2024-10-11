@@ -35,10 +35,20 @@ namespace pot::algorithms
             const IndexType chunkStart = from + IndexType(chunkIndex * chunk_size);
             const IndexType chunkEnd = std::min<IndexType>(chunkStart + IndexType(chunk_size), to);
 
-            tasks.push_back(executor.run([chunkStart, chunkEnd, &func, &executor]()
+            tasks.push_back(executor.run([chunkStart, chunkEnd, &func]() -> pot::coroutines::task<void> 
             {
                 for (IndexType i = chunkStart; i < chunkEnd; ++i)
-                    func(i);
+                {
+                    if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
+                    {
+                        co_await func(i);
+                    }
+                    else
+                    {
+                        func(i);
+                    }
+                }
+                co_return;
             }));
         }
 

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <type_traits>
 #include <exception>
+#include <concepts>
 
 #include "pot/tasks/impl/shared_state.h"
 
@@ -53,6 +54,9 @@ namespace pot::coroutines
             }
             return *this;
         }
+
+        task(const task &) = delete;
+        task &operator=(const task &) = delete;
 
         ~task()
         {
@@ -233,5 +237,17 @@ namespace pot::coroutines
             }
         }
     };
+
+    template <typename T>
+    concept IsNotTask = !std::is_same_v<T, task<typename T::value_type>>;
+
+#ifdef DISALLOW_NESTED_TASK
+    template <typename ValueType>
+        requires IsNotTask<ValueType>
+    class task<task<ValueType>>
+    {
+    public:
+    };
+#endif
 
 } // namespace pot::coroutines

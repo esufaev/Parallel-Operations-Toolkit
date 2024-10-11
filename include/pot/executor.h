@@ -42,57 +42,64 @@ namespace pot
         }
 
         template <typename Func, typename... Args>
-            requires std::is_invocable_v<Func, Args...>
-        auto run(Func func, Args... args) -> TaskType<std::invoke_result_t<Func, Args...>>
+        auto run(Func func, Args... args)
         {
             using return_type = std::invoke_result_t<Func, Args...>;
 
-            auto lpromise = std::make_shared<pot::coroutines::promise<return_type>>();
-            pot::coroutines::task<return_type> task = lpromise->get_task();
-            auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable
+            if constexpr (std::is_same_v<return_type, TaskType<void>>)
             {
-                try
+                auto lpromise = std::make_shared<pot::coroutines::promise<void>>();
+                pot::coroutines::task<void> task = lpromise->get_task();
+
+                auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable -> TaskType<void>
                 {
-                    if constexpr (std::is_void_v<return_type>)
+                    try
                     {
-                        std::invoke(func, args...);
+                        co_await func(args...);
                         promise->set_value();
                     }
-                    else
+                    catch (...)
                     {
-                        return_type res = std::invoke(func, args...);
-                        promise->set_value(res);
+                        promise->set_exception(std::current_exception());
                     }
-                }
-                catch (...)
+                    co_return;
+                };
+
+                derived_execute([lam = std::move(lam)]() mutable
+                                { lam(); });
+
+                return task;
+            }
+            else
+            {
+                auto lpromise = std::make_shared<pot::coroutines::promise<return_type>>();
+                pot::coroutines::task<return_type> task = lpromise->get_task();
+                auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable
                 {
-                    promise->set_exception(std::current_exception());
-                }
-            };
+                    try
+                    {
+                        if constexpr (std::is_void_v<return_type>)
+                        {
+                            std::invoke(func, args...);
+                            promise->set_value();
+                        }
+                        else
+                        {
+                            return_type res = std::invoke(func, args...);
+                            promise->set_value(res);
+                        }
+                    }
+                    catch (...)
+                    {
+                        promise->set_exception(std::current_exception());
+                    }
+                };
 
-            // std::packaged_task<return_type()> task([func, args...]() -> return_type { return func(args...); });
-            // auto future = task.get_future();
+                derived_execute(std::move(lam));
 
-            derived_execute(std::move(lam));
-
-            return task;
+                return task;
+            }
         }
-
-        // template <typename T, template <typename> typename TaskType>
-        // auto run_coroutine(TaskType<T> task) -> TaskType<T>
-        // {
-        //     auto lam = [task = std::move(task)]() mutable -> TaskType<T>
-        //     {
-        //         co_return co_await task;
-        //     };
-
-        //     derived_execute([lam = std::move(lam)]() mutable
-        //     {
-        //         lam();
-        //     });
-
-        //     return lam(); 
-        // }
 
         virtual void shutdown() = 0;
 
