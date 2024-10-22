@@ -46,23 +46,30 @@ namespace pot
         {
             using return_type = std::invoke_result_t<Func, Args...>;
 
-            if constexpr (std::is_same_v<return_type, TaskType<void>>)
+            if constexpr (std::is_base_of_v<pot::coroutines::task<return_type>, return_type>)
             {
-                auto lpromise = std::make_shared<pot::coroutines::promise<void>>();
-                pot::coroutines::task<void> task = lpromise->get_task();
+                auto lpromise = std::make_shared<pot::coroutines::promise<return_type>>();
+                pot::coroutines::task<return_type> task = lpromise->get_task();
 
-                auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable -> TaskType<void>
+                auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable -> TaskType<return_type>
                 {
                     try
                     {
-                        co_await func(args...);
-                        promise->set_value();
+                        if constexpr (std::is_void_v<return_type>)
+                        {
+                            co_await func(args...);
+                            promise->set_value();
+                        }
+                        else
+                        {
+                            return_type res = co_await func(args...);
+                            promise->set_value(res);
+                        }
                     }
                     catch (...)
                     {
-                        promise->set_exception(std::current_exception());
+                        promise->set_exception(std::current_exception()); 
                     }
-                    co_return;
                 };
 
                 derived_execute([lam = std::move(lam)]() mutable
@@ -74,6 +81,7 @@ namespace pot
             {
                 auto lpromise = std::make_shared<pot::coroutines::promise<return_type>>();
                 pot::coroutines::task<return_type> task = lpromise->get_task();
+
                 auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable
                 {
                     try
@@ -81,12 +89,12 @@ namespace pot
                         if constexpr (std::is_void_v<return_type>)
                         {
                             std::invoke(func, args...);
-                            promise->set_value();
+                            promise->set_value(); 
                         }
                         else
                         {
                             return_type res = std::invoke(func, args...);
-                            promise->set_value(res);
+                            promise->set_value(res); 
                         }
                     }
                     catch (...)

@@ -9,8 +9,8 @@
 #include <chrono>
 #include <type_traits>
 #include <exception>
-#include <concepts>
 
+#include "pot/concepts.h"
 #include "pot/tasks/impl/shared_state.h"
 
 namespace pot::coroutines
@@ -23,14 +23,14 @@ namespace pot::coroutines
         using handle_type = std::coroutine_handle<promise_type>;
 
         explicit task(std::shared_ptr<pot::tasks::details::shared_state<T>> state)
-            : m_state(std::move(state)), m_handle(nullptr)
+            : m_state(std::move(state)), m_handle(nullptr) requires pot::concept::is_not_task<T>
         {
         }
 
-        task(handle_type h) noexcept
+        task(handle_type h) noexcept requires pot::concepts::is_not_task<T>
             : m_handle(h) {}
 
-        task(handle_type h, std::shared_ptr<pot::tasks::details::shared_state<T>> state) noexcept
+        task(handle_type h, std::shared_ptr<pot::tasks::details::shared_state<T>> state) noexcept requires pot::concepts::is_not_task<T>
             : m_state(std::move(state)), m_handle(h)
         {
             h.promise().m_state = m_state;
@@ -143,7 +143,7 @@ namespace pot::coroutines
 
         promise_type() : m_state(std::make_shared<pot::tasks::details::shared_state<T>>()) {}
 
-        task<T> get_return_object()
+        task<T> get_return_object() requires pot::concepts::is_not_task<T>
         {
             return task<T>{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
@@ -194,22 +194,15 @@ namespace pot::coroutines
     public:
         promise() : m_state(std::make_shared<pot::tasks::details::shared_state<T>>()) {}
 
-        template <typename U = T, typename std::enable_if<!std::is_void<U>::value>::type * = nullptr>
-        void set_value(const U &value)
+        template<typename ValueType>
+        requires std::is_convertible_v<ValueType, T>
+        void set_value(ValueType&& value)
         {
             ensure_state();
-            m_state->set_value(value);
+            m_state->set_value(std::forward<ValueType>(value));
         }
 
-        template <typename U = T, typename std::enable_if<!std::is_void<U>::value>::type * = nullptr>
-        void set_value(U &&value)
-        {
-            ensure_state();
-            m_state->set_value(std::move(value));
-        }
-
-        template <typename U = T, typename std::enable_if<std::is_void<U>::value>::type * = nullptr>
-        void set_value()
+        void set_value() requires std::is_void_v<T>
         {
             ensure_state();
             m_state->set_value();
@@ -237,17 +230,5 @@ namespace pot::coroutines
             }
         }
     };
-
-    template <typename T>
-    concept IsNotTask = !std::is_same_v<T, task<typename T::value_type>>;
-
-#ifdef DISALLOW_NESTED_TASK
-    template <typename ValueType>
-        requires IsNotTask<ValueType>
-    class task<task<ValueType>>
-    {
-    public:
-    };
-#endif
 
 } // namespace pot::coroutines
