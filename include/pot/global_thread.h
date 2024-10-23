@@ -51,22 +51,18 @@ namespace pot
                     m_condition_ref.wait(lock, [&]
                                          { return stop_token.stop_requested() || !m_tasks_ref.empty(); });
 
-                    if (stop_token.stop_requested() && m_tasks_ref.empty())
+                    if (stop_token.stop_requested())
                     {
                         return;
                     }
 
-                    if (!m_tasks_ref.empty())
-                    {
-                        task = std::move(m_tasks_ref.front());
-                        m_tasks_ref.pop();
-                    }
+                    assert(not m_tasks_ref.empty());
+
+                    task = std::move(m_tasks_ref.front());
+                    m_tasks_ref.pop();
                 }
 
-                if (task)
-                {
-                    task();
-                }
+                task();
             }
         }
 
