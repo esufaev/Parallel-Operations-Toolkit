@@ -40,32 +40,8 @@ namespace pot::tasks::details
             return *this;
         }
 
-        template <typename U = T, typename = std::enable_if_t<!std::is_void_v<U>>>
-        void set_value(const U& value)
-        {
-            if (m_ready.exchange(true, std::memory_order_release))
-            {
-                throw std::runtime_error("shared_state::set_value() - value already set.");
-            }
-
-            m_variant = value;
-            notify_completion();
-        }
-
-        template <typename U = T, typename = std::enable_if_t<!std::is_void_v<U>>>
-        void set_value(U&& value)
-        {
-            if (m_ready.exchange(true, std::memory_order_release))
-            {
-                throw std::runtime_error("shared_state::set_value() - value already set.");
-            }
-
-            m_variant = std::move(value);
-            notify_completion();
-        }
-
-        template <typename U = T, typename = std::enable_if_t<std::is_void_v<U>>>
-        void set_value()
+        template<typename U = T>
+        void set_value() requires (std::is_void_v<U>)
         {
             if (m_ready.exchange(true, std::memory_order_release))
             {
@@ -73,6 +49,19 @@ namespace pot::tasks::details
             }
 
             m_variant = std::monostate{};
+            notify_completion();
+        }
+
+        template<typename U = T>
+        void set_value(U&& value) requires (!std::is_void_v<U>)
+        {
+            if (m_ready.exchange(true, std::memory_order_release))
+            {
+                throw std::runtime_error("shared_state::set_value() - value already set.");
+            }
+
+            m_variant.template emplace<T>(std::forward<U>(value));
+            // m_variant = std::variant<T>(std::forward<U>(value));
             notify_completion();
         }
 
@@ -87,7 +76,8 @@ namespace pot::tasks::details
             notify_completion();
         }
 
-        template <typename U = T, typename = std::enable_if_t<!std::is_void_v<U>>>
+        template <typename U = T>
+            requires (!std::is_void_v<U>)
         U get()
         {
             wait();
@@ -102,7 +92,8 @@ namespace pot::tasks::details
             return std::get<U>(m_variant);
         }
 
-        template <typename U = T, typename = std::enable_if_t<std::is_void_v<U>>>
+        template <typename U = void>
+            requires (std::is_void_v<U>)
         void get()
         {
             wait();
@@ -112,7 +103,7 @@ namespace pot::tasks::details
             }
         }
 
-        void wait()
+        void wait() const
         {
             while (!m_ready.load(std::memory_order_acquire))
             {
@@ -123,7 +114,7 @@ namespace pot::tasks::details
         template <typename Rep, typename Period>
         bool wait_for(const std::chrono::duration<Rep, Period>& timeout_duration)
         {
-            auto start_time = std::chrono::steady_clock::now();
+            const auto start_time = std::chrono::steady_clock::now();
             while (!m_ready.load(std::memory_order_acquire))
             {
                 if (std::chrono::steady_clock::now() - start_time > timeout_duration)
@@ -141,7 +132,7 @@ namespace pot::tasks::details
             return wait_for(timeout_time - std::chrono::steady_clock::now());
         }
 
-        bool is_ready() noexcept
+        bool is_ready() const noexcept
         {
             return m_ready.load();
         }
@@ -149,7 +140,8 @@ namespace pot::tasks::details
     private:
         void notify_completion()
         {
-            m_ready.store(true, std::memory_order_acq_rel);
+            // m_ready.store(true, std::memory_order_acq_rel);
+            m_ready = true;
         }
 
         std::atomic<bool> m_ready{ false };
