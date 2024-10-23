@@ -9,120 +9,65 @@
 
 namespace pot::coroutines
 {
-    class async_lock
-    {
+    class async_lock {
     public:
-        async_lock() : m_locked(false) {}
+        struct lock_guard {
+            explicit lock_guard(async_lock& lock) noexcept : m_lock(lock) {}
+            ~lock_guard() noexcept { m_lock.unlock(); }
 
-        async_lock(const async_lock &) = delete;
-        async_lock &operator=(const async_lock &) = delete;
+            lock_guard(const lock_guard&) = delete;
+            lock_guard& operator=(const lock_guard&) = delete;
+            lock_guard(lock_guard&&) noexcept = default;
+            lock_guard& operator=(lock_guard&&) noexcept = delete;
 
-        async_lock(async_lock &&other) noexcept
-            : m_locked(other.m_locked.test_and_set())
+        private:
+            async_lock& m_lock;
+        };
+
+        auto lock() noexcept
         {
-            if (!other.m_waiting_queue.empty())
+            struct awaitable
             {
-                m_waiting_queue = std::move(other.m_waiting_queue);
-            }
-        }
+                async_lock& lock;
 
-        async_lock &operator=(async_lock &&other) noexcept
-        {
-            if (this != &other)
-            {
-                m_locked.clear();
-                if (!m_waiting_queue.empty())
-                {
-                    m_waiting_queue = std::move(other.m_waiting_queue);
-                }
-                m_locked.test_and_set();
-            }
-            return *this;
-        }
+                explicit awaitable(async_lock& l) noexcept : lock(l) {}
 
-        auto lock()
-        {
-            struct awaiter
-            {
-                async_lock &m_lock;
-                std::coroutine_handle<> m_handle;
-
-                bool await_ready() const noexcept
-                {
-                    return !m_lock.m_locked.test_and_set(std::memory_order_acquire);
+                [[nodiscard]] bool await_ready() const noexcept {
+                    std::lock_guard guard(lock.m_mutex);
+                    return lock.m_waiting_handles.empty();
                 }
 
-                void await_suspend(std::coroutine_handle<> handle) noexcept
-                {
-                    m_handle = handle;
-                    m_lock.m_waiting_queue.push(handle);
+                void await_suspend(std::coroutine_handle<> h) noexcept {
+                    std::lock_guard guard(lock.m_mutex);
+                    lock.m_waiting_handles.push(h);
                 }
 
-                void await_resume() noexcept {}
+                lock_guard await_resume() noexcept {
+                    return lock_guard(lock);
+                }
+
             };
 
-            return awaiter{*this};
-        }
-
-        void unlock()
-        {
-            if (!m_waiting_queue.empty())
-            {
-                auto next_handle = m_waiting_queue.front();
-                m_waiting_queue.pop();
-                next_handle.resume();
-            }
-            else
-            {
-                m_locked.clear(std::memory_order_release);
-            }
+            return awaitable(*this);
         }
 
     private:
-        std::atomic_flag m_locked = ATOMIC_FLAG_INIT;
-        std::queue<std::coroutine_handle<>> m_waiting_queue;
-    };
-
-    class lock_guard
-    {
-    public:
-        explicit lock_guard(async_lock &lock)
-            : m_lock(lock), m_owns_lock(true) {}
-
-        ~lock_guard()
-        {
-            if (m_owns_lock)
+        void unlock() noexcept {
+            std::coroutine_handle<> to_resume;
             {
-                m_lock.unlock();
-            }
-        }
-
-        lock_guard(const lock_guard &) = delete;
-        lock_guard &operator=(const lock_guard &) = delete;
-
-        lock_guard(lock_guard &&other) noexcept
-            : m_lock(other.m_lock), m_owns_lock(other.m_owns_lock)
-        {
-            other.m_owns_lock = false;
-        }
-
-        lock_guard &operator=(lock_guard &&other) noexcept
-        {
-            if (this != &other)
-            {
-                if (m_owns_lock)
-                {
-                    m_lock.unlock();
+                std::lock_guard guard(m_mutex);
+                if (!m_waiting_handles.empty()) {
+                    to_resume = m_waiting_handles.front();
+                    m_waiting_handles.pop();
                 }
-                m_lock = std::move(other.m_lock);
-                m_owns_lock = other.m_owns_lock;
-                other.m_owns_lock = false;
             }
-            return *this;
+            if (to_resume) to_resume.resume();
         }
 
-    private:
-        async_lock &m_lock;
-        bool m_owns_lock;
+        std::queue<std::coroutine_handle<>> m_waiting_handles;
+        std::mutex m_mutex;
+
+        friend struct lock_guard;
     };
+
 } // namespace pot::coroutines
