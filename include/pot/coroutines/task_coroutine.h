@@ -232,3 +232,80 @@ namespace pot::coroutines
     };
 
 } // namespace pot::coroutines
+
+
+namespace pot::traits
+{
+    template<typename T>
+    struct task_value_type;
+    template<typename ValueType>
+    struct task_value_type<coroutines::task<ValueType>>
+    {
+        using type = ValueType;
+    };
+
+    template<typename ValueType>
+    using task_value_type_t = typename task_value_type<ValueType>::type;
+
+    template<typename T>
+    struct awaitable_value_type {
+        using type = T;
+    };
+
+    template<template<typename> typename Task, typename T>
+    struct awaitable_value_type<Task<T>> {
+        using type = T;
+    };
+
+    template<typename T>
+    using awaitable_value_type_t = typename awaitable_value_type<T>::type;
+
+
+    namespace concepts
+    {
+        template<typename Type>
+        concept is_task = requires(Type t)
+        {
+            typename task_value_type_t<std::remove_cvref_t<Type>>;
+            // typename Type::promise_type;
+            // { t.operator co_await() };
+
+        };
+
+        template<typename Type>
+        concept is_not_task = !is_task<Type>;
+
+        template<typename Type>
+        concept awaitable = requires(Type t, std::coroutine_handle<> h)
+        {
+            { t.await_ready() } -> std::convertible_to<bool>;
+            { t.await_suspend(h) } -> std::same_as<void>;
+            { t.await_resume() };
+        };
+
+        template<typename Func, typename... Args>
+        concept is_coroutine = requires(Func f, Args... args)
+        {
+            { f(args...) } -> is_task;
+        };
+
+    }
+    static_assert(std::is_same_v<task_value_type_t<coroutines::task<int>>, int>);
+    static_assert(concepts::is_task<coroutines::task<int>>);
+    static_assert(concepts::is_not_task<int>);
+
+    static_assert(concepts::awaitable<coroutines::task<int>>);
+    // static_assert(!concepts::awaitable<coroutines::promise<int>>);
+    static_assert(!concepts::awaitable<int>);
+
+    static_assert(concepts::is_coroutine<decltype([]() -> coroutines::task<void> { co_return  ; })> );
+    static_assert(concepts::is_coroutine<decltype([]() -> coroutines::task<int > { co_return 0; })> );
+
+    static_assert(concepts::is_coroutine<decltype([](int) -> coroutines::task<void> { co_return ; }), int> );
+    static_assert(concepts::is_coroutine<decltype([](int) -> coroutines::task<int > { co_return 0; }), int> );
+    static_assert(!concepts::is_coroutine<decltype([](int) -> coroutines::task<int> { co_return 0; })> );
+    static_assert(!concepts::is_coroutine<decltype([](int) -> int { return 0; })> );
+}
+
+
+
