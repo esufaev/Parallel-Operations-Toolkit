@@ -79,33 +79,7 @@ namespace pot
             }
             else
             {
-                auto lpromise = std::make_shared<pot::coroutines::promise<return_type>>();
-                pot::coroutines::task<return_type> task = lpromise->get_task();
-
-                auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable
-                {
-                    try
-                    {
-                        if constexpr (std::is_void_v<return_type>)
-                        {
-                            std::invoke(func, args...);
-                            promise->set_value(); 
-                        }
-                        else
-                        {
-                            return_type res = std::invoke(func, args...);
-                            promise->set_value(res); 
-                        }
-                    }
-                    catch (...)
-                    {
-                        promise->set_exception(std::current_exception());
-                    }
-                };
-
-                derived_execute(std::move(lam));
-
-                return task;
+                
             }
         }
 

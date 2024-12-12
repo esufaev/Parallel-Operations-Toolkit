@@ -69,5 +69,4 @@ namespace pot::coroutines
 
         friend struct lock_guard;
     };
-
 } // namespace pot::coroutines
