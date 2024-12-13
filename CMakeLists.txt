@@ -71,7 +71,6 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/coroutines/coroutine.h
     include/${PROJECT_NAME}/coroutines/task_coroutine.h
 
-    include/${PROJECT_NAME}/coroutines/task_coroutine.h
     include/${PROJECT_NAME}/algorithms/parfor.h
 
 )
