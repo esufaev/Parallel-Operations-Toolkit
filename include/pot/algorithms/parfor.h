@@ -8,9 +8,7 @@
 #include <cassert>
 
 #include "pot/when_all.h"
-#include "pot/executor.h"
 #include "pot/executors/thread_pool_executor.h"
-#include "pot/coroutines/task_coroutine.h"
 
 namespace pot::algorithms
 {
@@ -35,21 +33,20 @@ namespace pot::algorithms
             const IndexType chunkStart = from + IndexType(chunkIndex * chunk_size);
             const IndexType chunkEnd = std::min<IndexType>(chunkStart + IndexType(chunk_size), to);
 
-            tasks.push_back(executor.run([chunkStart, chunkEnd, &func]() -> pot::coroutines::task<void> 
-            {
+            tasks.push_back(executor.run([chunkStart, chunkEnd, &func]() -> pot::coroutines::task<void>
+                                         {
                 for (IndexType i = chunkStart; i < chunkEnd; ++i)
                 {
                     if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
                     {
                         co_await func(i);
                     }
-                    else
+                    else 
                     {
                         func(i);
                     }
-                }
-                co_return;
-            }));
+                    co_return;
+                } }));
         }
 
         co_return co_await pot::when_all(tasks.begin(), tasks.end());

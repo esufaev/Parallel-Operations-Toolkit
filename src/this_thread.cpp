@@ -49,7 +49,7 @@ void pot::this_thread::set_name(const std::string& name)
 
 #elif defined(POT_PLATFORM_LINUX) || defined(POT_PLATFORM_ANDROID)
 #include <sys/prctl.h>
-#include <sys/system_properties.h>
+// #include <sys/system_properties.h>
 
 void pot::this_thread::set_name(const std::string& name)
 {

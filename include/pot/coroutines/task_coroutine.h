@@ -14,16 +14,14 @@
 
 namespace pot::coroutines
 {
-
     template <typename T>
     class basic_promise_type
     {
     protected:
-        std::shared_ptr<tasks::details::shared_state<T>> m_state;
         std::coroutine_handle<> m_continuation;
 
     public:
-        std::atomic_flag m_is_resuming = ATOMIC_FLAG_INIT;
+        std::shared_ptr<tasks::details::shared_state<T>> m_state;
         basic_promise_type() : m_state(std::make_shared<tasks::details::shared_state<T>>()) {}
 
         void set_continuation(std::coroutine_handle<> continuation) noexcept
@@ -40,17 +38,32 @@ namespace pot::coroutines
 
         auto operator co_await() noexcept
         {
-            return *this;
+            return awaiter_t{m_state};
         }
 
         struct awaiter_t
         {
-            bool await_ready() const noexcept { return false; }
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept
+            std::shared_ptr<tasks::details::shared_state<T>> m_state;
+            std::coroutine_handle<> m_continuation;
+
+            bool await_ready() const noexcept
             {
-                return h;
+                return m_state->is_ready();
             }
-            void await_resume() const noexcept {}
+
+            void await_suspend(std::coroutine_handle<> h) noexcept
+            {
+                m_continuation = h;
+                m_state->set_continuation(h);
+            }
+
+            T await_resume()
+            {
+                if (m_state->has_exception())
+                    std::rethrow_exception(m_state->get_exception());
+
+                return m_state->get_value();
+            }
         };
 
         template <typename ValueType>
@@ -74,7 +87,7 @@ namespace pot::coroutines
             m_state->set_exception(ex);
         }
 
-        static constexpr std::suspend_always initial_suspend() noexcept { return {}; }
+        static constexpr std::suspend_never initial_suspend() noexcept { return {}; }
         static constexpr std::suspend_always final_suspend() noexcept { return {}; }
     };
 
@@ -84,9 +97,21 @@ namespace pot::coroutines
     public:
         struct promise_type : public basic_promise_type<T>
         {
+
             task get_return_object()
             {
                 return task{std::coroutine_handle<promise_type>::from_promise(*this)};
+            }
+
+            std::suspend_always yield_value(T value)
+            {
+                this->m_state->set_value(std::move(value));
+                return {};
+            }
+
+            auto get_shared_state() const noexcept
+            {
+                return basic_promise_type<T>::get_shared_state();
             }
 
             template <typename U>
@@ -100,12 +125,17 @@ namespace pot::coroutines
             {
                 this->m_state->set_exception(std::current_exception());
             }
+
+            ~promise_type()
+            {
+                printf("promise_type::~promise_type()\n");
+            }
         };
 
         using handle_type = std::coroutine_handle<promise_type>;
 
         explicit task(handle_type h) noexcept : m_handle(h) {}
-
+        task() noexcept : m_handle(nullptr) {}
         task(task &&rhs) noexcept : m_handle(rhs.m_handle)
         {
             rhs.m_handle = nullptr;
@@ -130,7 +160,7 @@ namespace pot::coroutines
 
         ~task()
         {
-            if (m_handle)
+            if (m_handle && m_handle.done())
             {
                 m_handle.destroy();
             }
@@ -138,32 +168,56 @@ namespace pot::coroutines
 
         bool await_ready() const noexcept
         {
-            return m_handle.done();
+            return m_handle && m_handle.done();
         }
 
         void await_suspend(std::coroutine_handle<> continuation) noexcept
         {
-            if (m_handle && !m_handle.done() && !m_handle.promise().m_is_resuming.test_and_set(std::memory_order_acquire))
+            if (!m_handle)
+            {
+                continuation.resume();
+                return;
+            }
+
+            try
             {
                 m_handle.promise().set_continuation(continuation);
-                m_handle.resume();
+                if (!m_handle.done())
+                {
+                    m_handle.resume();
+                }
+                else
+                {
+                    continuation.resume();
+                }
             }
-            m_handle.promise().m_is_resuming.clear(std::memory_order_release);
+            catch (...)
+            {
+                m_handle.promise().set_exception(std::current_exception());
+                continuation.resume();
+            }
         }
 
         T await_resume()
         {
-            return m_handle.promise().get_shared_state()->get();
+            if (!m_handle)
+            {
+                throw std::runtime_error("Invalid coroutine handle");
+            }
+            if constexpr (std::is_void_v<T>)
+            {
+                m_handle.promise().get_shared_state()->get();
+                return;
+            }
+            else
+            {
+                return m_handle.promise().get_shared_state()->get();
+            }
         }
 
         T get()
         {
-            if (m_handle && !m_handle.done() && !m_handle.promise().m_is_resuming.test_and_set(std::memory_order_acquire))
-            {
-                m_handle.resume();
-            }
-            m_handle.promise().m_is_resuming.clear(std::memory_order_release);
-            return m_handle.promise().get_shared_state()->get();
+            return await_resume();
         }
 
         class iterator
@@ -196,7 +250,7 @@ namespace pot::coroutines
 
                 bool await_ready() const noexcept
                 {
-                    return !m_handle || m_handle.done();
+                    return m_handle || m_handle.done();
                 }
 
                 std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) noexcept
@@ -235,7 +289,7 @@ namespace pot::coroutines
             this->m_state->set_exception(std::current_exception());
         }
     };
-} // namespace pot::coroutines
+}
 
 namespace pot::traits
 {

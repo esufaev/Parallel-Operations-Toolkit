@@ -44,19 +44,34 @@ namespace pot
             using return_type = std::invoke_result_t<Func, Args...>;
             if constexpr (pot::traits::concepts::is_task<return_type>)
             {
-                auto task_result = std::invoke(func, args...);
-                auto handle = task_result.operator co_await().m_handle;
-                auto handle_is_busy = handle.promise().m_is_resuming.test_and_set(std::memory_order_acquire);
+                using task_type = std::remove_cvref_t<return_type>;
+                using promise_type = typename task_type::promise_type;
 
-                derived_execute([handle, handle_is_busy]() mutable
-                                {
-                    if (handle && !handle.done() && !handle_is_busy)
+                auto lpromise = std::make_shared<promise_type>();
+                auto task = lpromise->get_return_object();
+                auto future = [promise = lpromise, func = std::forward<Func>(func), args...]() mutable -> return_type
+                {
+                    try
                     {
-                        handle.resume();
-                    } 
-                    handle.promise().m_is_resuming.clear(std::memory_order_release); });
+                        if constexpr (std::is_void_v<pot::traits::task_value_type_t<task_type>>)
+                        {
+                            co_await func(args...);
+                            promise->set_value();
+                        }
+                        else
+                        {
+                            auto result = co_await func(args...);
+                            promise->set_value(std::move(result));
+                        }
+                    }
+                    catch (...)
+                    {
+                        promise->set_exception(std::current_exception());
+                    }
+                };
 
-                return task_result;
+                derived_execute(std::move(future));
+                return task;
             }
             else
             {
@@ -83,7 +98,7 @@ namespace pot
                     }
                 };
 
-                derived_execute(std::move(lam));
+                derived_execute(lam);
 
                 return future;
             }
