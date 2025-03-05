@@ -19,9 +19,9 @@ namespace pot::coroutines
     {
     protected:
         std::coroutine_handle<> m_continuation;
+        std::shared_ptr<tasks::details::shared_state<T>> m_state;
 
     public:
-        std::shared_ptr<tasks::details::shared_state<T>> m_state;
         basic_promise_type() : m_state(std::make_shared<tasks::details::shared_state<T>>()) {}
 
         void set_continuation(std::coroutine_handle<> continuation) noexcept
@@ -103,6 +103,11 @@ namespace pot::coroutines
                 return task{std::coroutine_handle<promise_type>::from_promise(*this)};
             }
 
+            task get_future()
+            {
+                return get_return_object();
+            }
+
             std::suspend_always yield_value(T value)
             {
                 this->m_state->set_value(std::move(value));
@@ -111,7 +116,7 @@ namespace pot::coroutines
 
             auto get_shared_state() const noexcept
             {
-                return basic_promise_type<T>::get_shared_state();
+                return this->m_state;
             }
 
             template <typename U>
@@ -124,11 +129,6 @@ namespace pot::coroutines
             void unhandled_exception()
             {
                 this->m_state->set_exception(std::current_exception());
-            }
-
-            ~promise_type()
-            {
-                printf("promise_type::~promise_type()\n");
             }
         };
 
@@ -277,6 +277,11 @@ namespace pot::coroutines
         task<void> get_return_object()
         {
             return task<void>{std::coroutine_handle<promise_type>::from_promise(*this)};
+        }
+
+        task get_future()
+        {
+            return get_return_object();
         }
 
         void return_void()
