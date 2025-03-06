@@ -18,21 +18,10 @@ namespace pot::coroutines
     class basic_promise_type
     {
     protected:
-        std::coroutine_handle<> m_continuation;
         std::shared_ptr<tasks::details::shared_state<T>> m_state;
 
     public:
         basic_promise_type() : m_state(std::make_shared<tasks::details::shared_state<T>>()) {}
-
-        void set_continuation(std::coroutine_handle<> continuation) noexcept
-        {
-            m_continuation = continuation;
-        }
-
-        std::coroutine_handle<> continuation() const noexcept
-        {
-            return m_continuation;
-        }
 
         auto get_shared_state() const noexcept { return m_state; }
 
@@ -168,7 +157,7 @@ namespace pot::coroutines
 
         bool await_ready() const noexcept
         {
-            return m_handle && m_handle.done();
+            return m_handle || m_handle.done();
         }
 
         void await_suspend(std::coroutine_handle<> continuation) noexcept
@@ -181,7 +170,6 @@ namespace pot::coroutines
 
             try
             {
-                m_handle.promise().set_continuation(continuation);
                 if (!m_handle.done())
                 {
                     m_handle.resume();
@@ -242,30 +230,29 @@ namespace pot::coroutines
         auto begin() { return iterator(m_handle); }
         auto end() { return iterator(); }
 
-        auto operator co_await() noexcept
-        {
-            struct awaiter
-            {
-                handle_type m_handle;
+        // auto operator co_await() noexcept
+        // {
+        //     struct awaiter
+        //     {
+        //         handle_type m_handle;
 
-                bool await_ready() const noexcept
-                {
-                    return m_handle || m_handle.done();
-                }
+        //         bool await_ready() const noexcept
+        //         {
+        //             return m_handle || m_handle.done();
+        //         }
 
-                std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) noexcept
-                {
-                    m_handle.promise().set_continuation(continuation);
-                    return m_handle;
-                }
+        //         std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) noexcept
+        //         {
+        //             return m_handle;
+        //         }
 
-                T await_resume()
-                {
-                    return m_handle.promise().get_shared_state()->get();
-                }
-            };
-            return awaiter{m_handle};
-        }
+        //         T await_resume()
+        //         {
+        //             return m_handle.promise().get_shared_state()->get();
+        //         }
+        //     };
+        //     return awaiter{m_handle};
+        // }
 
     private:
         handle_type m_handle;
