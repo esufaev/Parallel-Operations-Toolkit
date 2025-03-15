@@ -87,12 +87,12 @@ namespace pot::coroutines
         struct promise_type : public basic_promise_type<T>
         {
 
-            task get_return_object()
+            task<T> get_return_object()
             {
                 return task{std::coroutine_handle<promise_type>::from_promise(*this)};
             }
 
-            task get_future()
+            task<T> get_future()
             {
                 return get_return_object();
             }
@@ -267,7 +267,7 @@ namespace pot::coroutines
             return task<void>{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
 
-        task get_future()
+        task<void> get_future()
         {
             return get_return_object();
         }
