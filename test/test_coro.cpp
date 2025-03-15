@@ -28,7 +28,7 @@ pot::coroutines::task<int> async_func_2(int x)
 
 TEST_CASE("PARFOR TEST")
 {
-    constexpr auto vec_size = 10;
+    constexpr auto vec_size = 10000;
 
     std::vector<double> vec_a(vec_size);
     std::vector<double> vec_b(vec_size);
@@ -44,10 +44,13 @@ TEST_CASE("PARFOR TEST")
     auto pool = pot::executors::thread_pool_executor_lq("Main");
     auto future = pot::algorithms::parfor(pool, 0, vec_size, [&](int i) -> pot::coroutines::task<void>
                                           {
-        printf("THREAD: %ull\n", std::this_thread::get_id());
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        printf("Task %d\n", i);
         vec_c[i] = vec_a[i] + vec_b[i];
         co_return; });
     printf("Future is ready\n");
+    future.get();
 
     REQUIRE(std::all_of(vec_c.begin(), vec_c.end(), [](const auto &v)
                         { return v == 3.0; }));

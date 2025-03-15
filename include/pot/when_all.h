@@ -1,10 +1,10 @@
 #pragma once
 
-#include "pot/coroutines/task_coroutine.h"
 #include <iterator>
 #include <vector>
 
-#include <iostream>
+#include "pot/coroutines/task_coroutine.h"
+
 namespace pot
 {
     template <typename Iterator>

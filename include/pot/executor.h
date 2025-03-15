@@ -42,42 +42,66 @@ namespace pot
         auto run(Func func, Args... args)
         {
             using return_type = std::invoke_result_t<Func, Args...>;
-            using lpromise_type = std::conditional_t<pot::traits::concepts::is_task<return_type>,
-                                                     typename return_type::promise_type,
-                                                     std::promise<return_type>>;
-            std::shared_ptr<lpromise_type> lpromise = std::make_shared<lpromise_type>();
-            auto future = lpromise->get_future();
-
-            auto lam = [promise = lpromise, func = std::forward<Func>(func), args...]() mutable -> return_type
+            if constexpr (pot::traits::concepts::is_task<return_type>)
             {
-                try
-                {
-                    if constexpr (std::is_void_v<pot::traits::task_value_type_t<return_type>>)
-                    {
-                        if constexpr (pot::traits::concepts::is_task<return_type>)
-                            co_await func(args...);
-                        else
-                            std::invoke(func, args...);
-                        promise->set_value();
-                    }
-                    else
-                    {
-                        return_type res;
-                        if constexpr (pot::traits::concepts::is_task<return_type>)
-                            res = co_await func(args...);
-                        else
-                            res = std::invoke(func, args...);
-                        promise->set_value(std::move(res));
-                    }
-                }
-                catch (...)
-                {
-                    promise->set_exception(std::current_exception());
-                }
-            };
+                using task_type = std::remove_cvref_t<return_type>;
+                using promise_type = typename task_type::promise_type;
 
-            derived_execute(std::move(lam));
-            return future;
+                auto lpromise = std::make_shared<promise_type>();
+                auto task = lpromise->get_return_object();
+                auto future = [promise = lpromise, func = std::forward<Func>(func), args...]() mutable -> return_type
+                {
+                    try
+                    {
+                        if constexpr (std::is_void_v<pot::traits::task_value_type_t<task_type>>)
+                        {
+                            co_await func(args...);
+                            promise->set_value();
+                        }
+                        else
+                        {
+                            auto result = co_await func(args...);
+                            promise->set_value(std::move(result));
+                        }
+                    }
+                    catch (...)
+                    {
+                        promise->set_exception(std::current_exception());
+                    }
+                };
+
+                derived_execute(std::move(future));
+                return task;
+            }
+            else
+            {
+                auto lpromise = std::make_shared<std::promise<return_type>>();
+                std::future<return_type> future = lpromise->get_future();
+                auto lam = [promise = std::move(lpromise), func = std::forward<Func>(func), args...]() mutable
+                {
+                    try
+                    {
+                        if constexpr (std::is_void_v<return_type>)
+                        {
+                            std::invoke(func, args...);
+                            promise->set_value();
+                        }
+                        else
+                        {
+                            return_type res = std::invoke(func, args...);
+                            promise->set_value(res);
+                        }
+                    }
+                    catch (...)
+                    {
+                        promise->set_exception(std::current_exception());
+                    }
+                };
+
+                derived_execute(lam);
+
+                return future;
+            }
         }
 
         virtual void shutdown() = 0;

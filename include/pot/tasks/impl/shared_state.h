@@ -29,6 +29,15 @@ namespace pot::tasks::details
         shared_state(const shared_state &) = delete;
         shared_state &operator=(const shared_state &) = delete;
 
+        void set_continuation(std::coroutine_handle<> continuation)
+        {
+            m_continuation = continuation;
+            if (is_ready() && m_continuation)
+            {
+                m_continuation.resume();
+            }
+        }
+
         template <typename U = T>
         void set_value(U &&value)
             requires(!std::is_void_v<T>)
@@ -38,7 +47,10 @@ namespace pot::tasks::details
             {
                 throw std::runtime_error("Value already set in shared_state.");
             }
-            notify_continuation();
+            if (m_continuation)
+            {
+                m_continuation.resume();
+            }
         }
 
         void set_value()
@@ -49,17 +61,24 @@ namespace pot::tasks::details
             {
                 throw std::runtime_error("Value already set in shared_state.");
             }
-            notify_continuation();
+            if (m_continuation)
+            {
+                m_continuation.resume();
+            }
         }
 
         void set_exception(std::exception_ptr ex)
         {
             m_data = ex;
+            printf("Rethrow\n");
             if (m_ready.exchange(true, std::memory_order_release))
             {
                 throw std::runtime_error("Exception already set in shared_state.");
             }
-            notify_continuation();
+            if (m_continuation)
+            {
+                m_continuation.resume();
+            }
         }
 
         T get()
@@ -75,11 +94,6 @@ namespace pot::tasks::details
             }
         }
 
-        void set_continuation(std::coroutine_handle<> continuation) noexcept
-        {
-            m_continuation = continuation;
-        }
-
         void wait() const
         {
             while (!m_ready.load(std::memory_order_acquire))
@@ -88,15 +102,12 @@ namespace pot::tasks::details
             }
         }
 
-    private:
-        void notify_continuation()
+        bool is_ready() const
         {
-            if (m_continuation)
-            {
-                m_continuation.resume();
-            }
+            return m_ready.load();
         }
 
+    private:
         std::atomic<bool> m_ready{false};
         variant_type m_data{std::monostate{}};
         std::coroutine_handle<> m_continuation{nullptr};

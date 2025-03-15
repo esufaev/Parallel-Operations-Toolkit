@@ -25,35 +25,35 @@ namespace pot::coroutines
 
         auto get_shared_state() const noexcept { return m_state; }
 
-        auto operator co_await() noexcept
-        {
-            return awaiter_t{m_state};
-        }
+        // auto operator co_await() noexcept
+        // {
+        //     return awaiter_t{m_state};
+        // }
 
-        struct awaiter_t
-        {
-            std::shared_ptr<tasks::details::shared_state<T>> m_state;
-            std::coroutine_handle<> m_continuation;
+        // struct awaiter_t
+        // {
+        //     std::shared_ptr<tasks::details::shared_state<T>> m_state;
+        //     std::coroutine_handle<> m_continuation;
 
-            bool await_ready() const noexcept
-            {
-                return m_state->is_ready();
-            }
+        //     bool await_ready() const noexcept
+        //     {
+        //         return m_state->is_ready();
+        //     }
 
-            void await_suspend(std::coroutine_handle<> h) noexcept
-            {
-                m_continuation = h;
-                m_state->set_continuation(h);
-            }
+        //     void await_suspend(std::coroutine_handle<> h) noexcept
+        //     {
+        //         m_continuation = h;
+        //         m_state->set_continuation(h);
+        //     }
 
-            T await_resume()
-            {
-                if (m_state->has_exception())
-                    std::rethrow_exception(m_state->get_exception());
+        //     T await_resume()
+        //     {
+        //         if (m_state->has_exception())
+        //             std::rethrow_exception(m_state->get_exception());
 
-                return m_state->get_value();
-            }
-        };
+        //         return m_state->get_value();
+        //     }
+        // };
 
         template <typename ValueType>
             requires(!std::is_void_v<T> && std::is_convertible_v<ValueType, T>)
@@ -157,7 +157,9 @@ namespace pot::coroutines
 
         bool await_ready() const noexcept
         {
-            return m_handle || m_handle.done();
+            // printf("await_resume with: %b", m_handle || m_handle.done());
+            // bool ready = (m_handle || m_handle.done()) && m_handle.promise().get_shared_state()->is_ready();
+            return m_handle && m_handle.promise().get_shared_state()->is_ready();
         }
 
         void await_suspend(std::coroutine_handle<> continuation) noexcept
@@ -167,23 +169,24 @@ namespace pot::coroutines
                 continuation.resume();
                 return;
             }
+            m_handle.promise().get_shared_state()->set_continuation(continuation);
 
-            try
-            {
-                if (!m_handle.done())
-                {
-                    m_handle.resume();
-                }
-                else
-                {
-                    continuation.resume();
-                }
-            }
-            catch (...)
-            {
-                m_handle.promise().set_exception(std::current_exception());
-                continuation.resume();
-            }
+            // try
+            // {
+            //     if (!m_handle.done())
+            //     {
+            //         m_handle.resume();
+            //     }
+            //     else
+            //     {
+            //         continuation.resume();
+            //     }
+            // }
+            // catch (...)
+            // {
+            //     m_handle.promise().set_exception(std::current_exception());
+            //     continuation.resume();
+            // }
         }
 
         T await_resume()

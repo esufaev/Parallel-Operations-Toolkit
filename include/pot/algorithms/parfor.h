@@ -35,20 +35,21 @@ namespace pot::algorithms
 
             tasks.push_back(executor.run([chunkStart, chunkEnd, &func]() -> pot::coroutines::task<void>
                                          {
-                for (IndexType i = chunkStart; i < chunkEnd; ++i)
+            for (IndexType i = chunkStart; i < chunkEnd; ++i)
+            {
+                if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
                 {
-                    if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
-                    {
-                        co_await func(i);
-                    }
-                    else 
-                    {
-                        func(i);
-                    }
-                    co_return;
-                } }));
+                    co_await func(i);
+                }
+                else
+                {
+                    func(i);
+                }
+            }
+            co_return; }));
         }
 
-        co_return co_await pot::when_all(tasks.begin(), tasks.end());
+        co_await pot::when_all(tasks.begin(), tasks.end());
+        co_return;
     }
 }
