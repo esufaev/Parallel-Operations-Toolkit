@@ -157,8 +157,6 @@ namespace pot::coroutines
 
         bool await_ready() const noexcept
         {
-            // printf("await_resume with: %b", m_handle || m_handle.done());
-            // bool ready = (m_handle || m_handle.done()) && m_handle.promise().get_shared_state()->is_ready();
             return m_handle && m_handle.promise().get_shared_state()->is_ready();
         }
 
