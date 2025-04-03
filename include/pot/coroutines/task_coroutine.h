@@ -9,21 +9,22 @@
 #include <chrono>
 #include <type_traits>
 #include <exception>
-
-#include "pot/tasks/impl/shared_state.h"
+#include <vector>
+#include <variant>
+#include <atomic>
 
 namespace pot::coroutines
 {
     template <typename T>
     class basic_promise_type
     {
-    protected:
-        std::shared_ptr<tasks::details::shared_state<T>> m_state;
-
     public:
-        basic_promise_type() : m_state(std::make_shared<tasks::details::shared_state<T>>()) {}
+        using value_type = T;
+        using variant_type = std::conditional_t<std::is_void_v<T>,
+                                                std::variant<std::monostate, std::exception_ptr>,
+                                                std::variant<std::monostate, T, std::exception_ptr>>;
 
-        auto get_shared_state() const noexcept { return m_state; }
+        basic_promise_type() {}
 
         // auto operator co_await() noexcept
         // {
@@ -55,29 +56,96 @@ namespace pot::coroutines
         //     }
         // };
 
-        template <typename ValueType>
-            requires(!std::is_void_v<T> && std::is_convertible_v<ValueType, T>)
-        void set_value(ValueType &&value)
+        template <typename U = T>
+            requires(!std::is_void_v<T> && std::is_convertible_v<U, T>)
+        void set_value(U &&value)
         {
-            assert(m_state);
-            m_state->set_value(std::forward<ValueType>(value));
+            m_data.template emplace<T>(std::forward<U>(value));
+            if (m_ready.exchange(true, std::memory_order_release))
+            {
+                throw std::runtime_error("Value already set in promise_type.");
+            }
+            for (auto &cont : m_continuations)
+            {
+                cont.resume();
+            }
+            m_continuations.clear();
         }
 
         void set_value()
             requires std::is_void_v<T>
         {
-            assert(m_state);
-            m_state->set_value();
+            m_data = std::monostate{};
+            if (m_ready.exchange(true, std::memory_order_release))
+            {
+                throw std::runtime_error("Value already set in promise_type.");
+            }
+            for (auto &cont : m_continuations)
+            {
+                cont.resume();
+            }
+            m_continuations.clear();
         }
 
         void set_exception(std::exception_ptr ex)
         {
-            assert(m_state);
-            m_state->set_exception(ex);
+            m_data = ex;
+            if (m_ready.exchange(true, std::memory_order_release))
+            {
+                throw std::runtime_error("Exception already set in promise_type.");
+            }
+            for (auto &cont : m_continuations)
+            {
+                cont.resume();
+            }
+            m_continuations.clear();
+        }
+
+        bool is_ready() const noexcept
+        {
+            return m_ready.load(std::memory_order_acquire);
+        }
+
+        void set_continuation(std::coroutine_handle<> continuation)
+        {
+            if (m_ready.load(std::memory_order_acquire))
+            {
+                continuation.resume();
+            }
+            else
+            {
+                m_continuations.push_back(continuation);
+            }
+        }
+
+        T get()
+        {
+            wait();
+            if (std::holds_alternative<std::exception_ptr>(m_data))
+            {
+                std::rethrow_exception(std::get<std::exception_ptr>(m_data));
+            }
+            if constexpr (!std::is_void_v<T>)
+            {
+                return std::get<T>(m_data);
+            }
+        }
+
+        void wait() const
+        {
+            while (!m_ready.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
         }
 
         static constexpr std::suspend_never initial_suspend() noexcept { return {}; }
         static constexpr std::suspend_always final_suspend() noexcept { return {}; }
+
+    private:
+        std::atomic<bool> m_ready{false};
+        variant_type m_data{std::monostate{}};
+        std::vector<std::coroutine_handle<>> m_continuations;
     };
 
     template <typename T>
@@ -112,12 +180,12 @@ namespace pot::coroutines
                 requires std::convertible_to<U, T>
             void return_value(U &&value)
             {
-                this->m_state->set_value(std::forward<U>(value));
+                this->set_value(std::forward<U>(value));
             }
 
             void unhandled_exception()
             {
-                this->m_state->set_exception(std::current_exception());
+                this->set_exception(std::current_exception());
             }
         };
 
@@ -157,21 +225,21 @@ namespace pot::coroutines
 
         bool await_ready() const noexcept
         {
-            return m_handle && m_handle.promise().get_shared_state()->is_ready();
+            return m_handle && m_handle.promise().is_ready();
         }
 
         void await_suspend(std::coroutine_handle<> continuation) noexcept
         {
-            if (!m_handle)
-            {
-                continuation.resume();
-                return;
-            }
-            m_handle.promise().get_shared_state()->set_continuation(continuation);
+            // if (!m_handle)
+            // {
+            //     continuation.resume();
+            //     return;
+            // }
+            // m_handle.promise().get_shared_state()->set_continuation(continuation);
 
             // try
             // {
-            //     if (!m_handle.done())
+            //     if (m_handle && !m_handle.done())
             //     {
             //         m_handle.resume();
             //     }
@@ -185,6 +253,8 @@ namespace pot::coroutines
             //     m_handle.promise().set_exception(std::current_exception());
             //     continuation.resume();
             // }
+
+            m_handle.promise().set_continuation(continuation);
         }
 
         T await_resume()
@@ -195,12 +265,12 @@ namespace pot::coroutines
             }
             if constexpr (std::is_void_v<T>)
             {
-                m_handle.promise().get_shared_state()->get();
+                m_handle.promise().get();
                 return;
             }
             else
             {
-                return m_handle.promise().get_shared_state()->get();
+                return m_handle.promise().get();
             }
         }
 
@@ -274,12 +344,12 @@ namespace pot::coroutines
 
         void return_void()
         {
-            this->m_state->set_value();
+            this->set_value();
         }
 
         void unhandled_exception()
         {
-            this->m_state->set_exception(std::current_exception());
+            this->set_exception(std::current_exception());
         }
     };
 }
