@@ -2,9 +2,9 @@
 include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 
 # Create test executable
-
 set(TEST_SOURCES
-    test_coro.cpp
+  # test_coro.cpp
+  test_async_cd.cpp
 )
 
 add_executable(tests ${TEST_SOURCES})

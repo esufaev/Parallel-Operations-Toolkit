@@ -4,7 +4,7 @@
 #include <future>
 #include <functional>
 
-#include "pot/coroutines/task_coroutine.h"
+#include "pot/coroutines/task.h"
 
 namespace pot
 {
