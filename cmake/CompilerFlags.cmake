@@ -7,6 +7,8 @@ set(GNU_CLANG_FLAGS
     -std=c++23
     -mavx2
     -fexceptions
+    -fsanitize=leak
+    -O2
 )
 
 set(GNU_CLANG_WARNING_FLAGS

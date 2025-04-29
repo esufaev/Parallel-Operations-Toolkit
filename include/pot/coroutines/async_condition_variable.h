@@ -1,63 +1,68 @@
-#include <list>
 #include <coroutine>
+#include <atomic>
 
 namespace pot::coroutines
 {
     using coro_t = std::coroutine_handle<>;
-    
+
     class async_condition_variable
     {
         struct awaiter;
 
-        std::list<awaiter> m_awaiter_list;
-        bool m_set_state;
+        std::atomic<awaiter *> m_awaiter_head{nullptr};
+        std::atomic<bool> m_set_state{false};
 
         struct awaiter
         {
-            async_condition_variable &awaiter_event;
+            async_condition_variable &awaiting_event;
             coro_t coroutine_handle = nullptr;
-            awaiter(async_condition_variable &event) noexcept : awaiter_event(event) {}
+            awaiter *next = nullptr;
 
-            bool await_ready() const noexcept { return awaiter_event.is_set(); }
+            awaiter(async_condition_variable &event) noexcept : awaiting_event(event) {}
+
+            bool await_ready() const noexcept { return awaiting_event.m_set_state.load(std::memory_order_acquire); }
 
             void await_suspend(coro_t c) noexcept
             {
                 coroutine_handle = c;
-                awaiter_event.push_awaiter(*this);
+                awaiter *old_head = awaiting_event.m_awaiter_head.load(std::memory_order_acquire);
+                do { next = old_head; } 
+                while (!awaiting_event.m_awaiter_head.compare_exchange_weak(
+                    old_head, this, std::memory_order_release, std::memory_order_relaxed));
             }
 
-            void await_resume() noexcept { awaiter_event.reset(); }
+            void await_resume() noexcept { awaiting_event.reset(); }
         };
 
     public:
-        async_condition_variable(bool set = false) : m_set_state{set} {}
+        async_condition_variable(bool set = false) noexcept : m_set_state{set} {}
 
         async_condition_variable(const async_condition_variable &) = delete;
         async_condition_variable &operator=(const async_condition_variable &) = delete;
         async_condition_variable(async_condition_variable &&) = delete;
         async_condition_variable &operator=(async_condition_variable &&) = delete;
 
-        bool is_set() const noexcept { return m_set_state; }
-
-        void push_awaiter(awaiter a) { m_awaiter_list.push_back(a); }
-
         awaiter operator co_await() noexcept { return awaiter{*this}; }
 
         void set() noexcept
         {
-            m_set_state = true;
-            std::list<awaiter> resume_list;
-            resume_list.splice(resume_list.begin(), m_awaiter_list);
-            for (auto s : resume_list)
-                s.coroutine_handle.resume();
+            m_set_state.store(true, std::memory_order_release);
+            awaiter *head = m_awaiter_head.exchange(nullptr, std::memory_order_acquire);
+            while (head != nullptr)
+            {
+                coro_t handle = head->coroutine_handle;
+                head = head->next;
+                handle.resume();
+            }
         }
 
         void stop() noexcept
         {
-            m_set_state = false;
-            m_awaiter_list.clear();
+            m_set_state.store(false, std::memory_order_release);
+            m_awaiter_head.exchange(nullptr, std::memory_order_acquire);
         }
 
-        void reset() noexcept { m_set_state = false; }
+        bool is_set() const noexcept { return m_set_state.load(std::memory_order_acquire); }
+        void reset() noexcept { m_set_state.store(false, std::memory_order_release); }
     };
 }
