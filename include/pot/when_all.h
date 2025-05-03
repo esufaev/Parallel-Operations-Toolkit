@@ -3,7 +3,7 @@
 #include <iterator>
 #include <vector>
 
-#include "pot/coroutines/task_coroutine.h"
+#include "pot/coroutines/task.h"
 
 namespace pot
 {

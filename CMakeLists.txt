@@ -45,7 +45,6 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/traits/compare.h
     include/${PROJECT_NAME}/traits/guards.h
 
-
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/progress.h
 
@@ -68,10 +67,12 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/tasks/impl/lazy_shared_state.h
     include/${PROJECT_NAME}/tasks/impl/big_shared_state.h
 
-    include/${PROJECT_NAME}/coroutines/coroutine.h
-    include/${PROJECT_NAME}/coroutines/task_coroutine.h
+    include/${PROJECT_NAME}/coroutines/task.h
+    include/${PROJECT_NAME}/coroutines/async_condition_variable.h
+    include/${PROJECT_NAME}/coroutines/__details/basic_promise_type.h
 
     include/${PROJECT_NAME}/algorithms/parfor.h
+    include/${PROJECT_NAME}/algorithms/lfqueue.h
 
 )
 
