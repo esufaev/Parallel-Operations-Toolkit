@@ -2,20 +2,22 @@
 #include <thread>
 #include <vector>
 
+#include "pot/cache_line.h"
+
 namespace pot::algorithms
 {
     template <typename T>
-    class lfqueue
+    class alignas(pot::cache_line_alignment) lfqueue
     {
-        struct cell_t
+        struct alignas(pot::cache_line_alignment) cell_t
         {
             std::atomic<size_t> m_sequence;
             T m_data;
         };
 
-        alignas(64) std::vector<cell_t> buffer;
-        alignas(64) size_t buffer_mask;
-        alignas(64) std::atomic<size_t> epos, dpos;
+        alignas(pot::cache_line_alignment) std::vector<cell_t> buffer;
+        alignas(pot::cache_line_alignment) size_t buffer_mask;
+        alignas(pot::cache_line_alignment) std::atomic<size_t> epos, dpos;
 
     public:
         lfqueue(size_t size) : buffer(size), buffer_mask(size - 1)

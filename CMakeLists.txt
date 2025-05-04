@@ -31,6 +31,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/future.h
     include/${PROJECT_NAME}/promise.h
     include/${PROJECT_NAME}/this_thread.h
+    include/${PROJECT_NAME}/cache_line.h
 
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
