@@ -52,6 +52,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
     include/${PROJECT_NAME}/executors/thread_pool_executor.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor_lfgq.h
 
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_gq_esu.h
     include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_lq_esu.h

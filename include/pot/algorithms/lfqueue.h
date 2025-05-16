@@ -12,11 +12,11 @@ namespace pot::algorithms
         struct alignas(pot::cache_line_alignment) cell_t
         {
             std::atomic<size_t> m_sequence;
-            T m_data;
+            T                   m_data;
         };
 
         alignas(pot::cache_line_alignment) std::vector<cell_t> buffer;
-        alignas(pot::cache_line_alignment) size_t buffer_mask;
+        alignas(pot::cache_line_alignment) size_t              buffer_mask;
         alignas(pot::cache_line_alignment) std::atomic<size_t> epos, dpos;
 
     public:
