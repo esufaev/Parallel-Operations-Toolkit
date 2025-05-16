@@ -86,7 +86,7 @@ namespace pot::coroutine::__details
         }
 
         static constexpr std::suspend_never initial_suspend() noexcept { return {}; }
-        static constexpr std::suspend_never final_suspend() noexcept { return {}; }
+        static constexpr std::suspend_always final_suspend() noexcept { return {}; }
 
     private:
         std::atomic<bool> m_ready{false};
