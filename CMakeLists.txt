@@ -19,8 +19,13 @@ option(POT_CHECK_WARNINGS    "Strict compiler checks" ON )
 add_compile_definitions(_SILENCE_ALL_CXX23_DEPRECATION_WARNINGS)
 
 # Apply compiler flags
-include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
-apply_compiler_flags()
+set(_pot_compiler_flags "${CMAKE_CURRENT_LIST_DIR}/../cmake/CompilerFlags.cmake")
+if(EXISTS "${_pot_compiler_flags}")
+    include("${_pot_compiler_flags}")
+    if(COMMAND apply_compiler_flags)
+        apply_compiler_flags()
+    endif()
+endif()
 
 
 set(POT_HEADERS
@@ -105,7 +110,9 @@ set_target_properties(
 )
 target_compile_features(pot PUBLIC cxx_std_23)
 # Apply warning flags
-apply_warning_flags_to_targets(pot)
+if(COMMAND apply_warning_flags_to_targets)
+    apply_warning_flags_to_targets(pot)
+endif()
 
 target_include_directories(${PROJECT_NAME}
         PUBLIC
