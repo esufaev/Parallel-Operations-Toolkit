@@ -1,6 +1,6 @@
 #pragma once
 
-#include "thread.h"
+#include "pot/threads/thread.h"
 
 namespace pot
 {

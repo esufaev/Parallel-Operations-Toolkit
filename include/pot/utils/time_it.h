@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 
 namespace pot::utils
 {
@@ -13,8 +14,6 @@ namespace pot::utils
 
         clock_type::duration duration{0};
 
-
-        // execute function n times
         for (size_t i = 0; i < n; i++)
         {
             const auto start = clock_type::now();
@@ -36,7 +35,4 @@ namespace pot::utils
     {
         return time_it<DurationType, Func, Args...>(1, {}, std::forward<Func>(func), std::forward<Args>(args)...);
     }
-
-
-
 }

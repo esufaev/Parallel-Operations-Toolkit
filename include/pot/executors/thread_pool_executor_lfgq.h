@@ -3,7 +3,7 @@
 #include <atomic>
 
 #include "pot/algorithms/lfqueue.h"
-#include "pot/executor.h"
+#include "pot/executors/executor.h"
 
 namespace pot::executors
 {

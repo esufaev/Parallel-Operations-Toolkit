@@ -1,8 +1,8 @@
-#include "pot/this_thread.h"
+#include "pot/utils/this_thread.h"
 
 #include <codecvt>
 
-#include "pot/platform.h"
+#include "pot/utils/platform.h"
 #include "pot/traits/compare.h"
 
 void pot::details::this_thread::init_thread_variables(const int64_t local_id, const std::weak_ptr<executor>& owner_executor)

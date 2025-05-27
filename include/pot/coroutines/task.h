@@ -34,17 +34,23 @@ namespace pot::coroutines
         using handle_type = std::coroutine_handle<promise_type>;
 
         explicit task(handle_type h) noexcept : m_handle(h) {}
+
+        operator bool() const noexcept { return &m_handle; }
+
         task() noexcept : m_handle(nullptr) {}
 
-        task(task &&rhs) noexcept : m_handle(rhs.m_handle) { rhs.m_handle = nullptr; }
+        task(task &&rhs) noexcept
+        {
+            if (rhs.m_handle)
+            {
+                m_handle = rhs.m_handle;
+                rhs.m_handle = nullptr;
+            }
+        }
         task &operator=(task &&rhs) noexcept
         {
             if (this != &rhs)
             {
-                if (m_handle)
-                {
-                    m_handle.destroy();
-                }
                 m_handle = rhs.m_handle;
                 rhs.m_handle = nullptr;
             }
@@ -57,9 +63,7 @@ namespace pot::coroutines
         ~task()
         {
             if (m_handle && m_handle.done())
-            {
                 m_handle.destroy();
-            }
         }
 
         bool await_ready() const noexcept { return m_handle && m_handle.promise().is_ready(); }
@@ -69,8 +73,10 @@ namespace pot::coroutines
             if (!m_handle)
                 throw std::runtime_error("Invalid coroutine handle");
 
-            if constexpr (std::is_void_v<T>) m_handle.promise().get();
-            else return m_handle.promise().get();
+            if constexpr (std::is_void_v<T>)
+                m_handle.promise().get();
+            else
+                return m_handle.promise().get();
         }
 
         T get() { return await_resume(); }

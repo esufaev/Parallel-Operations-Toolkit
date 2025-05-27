@@ -2,7 +2,7 @@
 #include <thread>
 #include <vector>
 
-#include "pot/cache_line.h"
+#include "pot/utils/cache_line.h"
 
 namespace pot::algorithms
 {

@@ -19,79 +19,47 @@ option(POT_CHECK_WARNINGS    "Strict compiler checks" ON )
 add_compile_definitions(_SILENCE_ALL_CXX23_DEPRECATION_WARNINGS)
 
 # Apply compiler flags
-set(_pot_compiler_flags "${CMAKE_CURRENT_LIST_DIR}/../cmake/CompilerFlags.cmake")
-if(EXISTS "${_pot_compiler_flags}")
-    include("${_pot_compiler_flags}")
-    if(COMMAND apply_compiler_flags)
-        apply_compiler_flags()
-    endif()
-endif()
-
+include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
+apply_compiler_flags()
 
 set(POT_HEADERS
-    include/${PROJECT_NAME}/pot_traits.h
-    include/${PROJECT_NAME}/when_all.h
-    include/${PROJECT_NAME}/executor.h
-    include/${PROJECT_NAME}/platform.h
-    include/${PROJECT_NAME}/future.h
-    include/${PROJECT_NAME}/promise.h
-    include/${PROJECT_NAME}/this_thread.h
-    include/${PROJECT_NAME}/cache_line.h
-
-    include/${PROJECT_NAME}/executors/inline_executor.h
-    include/${PROJECT_NAME}/executors/thread_executor.h
-    include/${PROJECT_NAME}/executors/thread_pool_executor.h
-
     include/${PROJECT_NAME}/simd/simd_traits.h
     include/${PROJECT_NAME}/simd/simd_auto.h
     include/${PROJECT_NAME}/simd/simd_forced.h
-
+        
     include/${PROJECT_NAME}/sync/sync_object.h
 
+    include/${PROJECT_NAME}/traits/pot_traits.h
     include/${PROJECT_NAME}/traits/compare.h
     include/${PROJECT_NAME}/traits/guards.h
-
+        
     include/${PROJECT_NAME}/utils/time_it.h
-    include/${PROJECT_NAME}/utils/progress.h
-
+    include/${PROJECT_NAME}/utils/platform.h
+    include/${PROJECT_NAME}/utils/this_thread.h
+    include/${PROJECT_NAME}/utils/cache_line.h
+    
+    include/${PROJECT_NAME}/executors/executor.h
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
-    include/${PROJECT_NAME}/executors/thread_pool_executor.h
     include/${PROJECT_NAME}/executors/thread_pool_executor_lfgq.h
-
-    include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_gq_esu.h
-    include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_lq_esu.h
-    include/${PROJECT_NAME}/experimental/thread_pool/thread_pool_fpe.h
-
-    include/${PROJECT_NAME}/allocators/shared_allocator.h
-
-    include/${PROJECT_NAME}/tasks/stack_task.h
-    include/${PROJECT_NAME}/tasks/task.h
-    include/${PROJECT_NAME}/tasks/lazy_task.h
-    include/${PROJECT_NAME}/tasks/big_task.h
-
-    include/${PROJECT_NAME}/tasks/impl/shared_state.h
-    include/${PROJECT_NAME}/tasks/impl/lazy_shared_state.h
-    include/${PROJECT_NAME}/tasks/impl/big_shared_state.h
-
+    include/${PROJECT_NAME}/executors/thread_pool_executor.h
+    
     include/${PROJECT_NAME}/coroutines/task.h
     include/${PROJECT_NAME}/coroutines/async_condition_variable.h
+    include/${PROJECT_NAME}/coroutines/when_all.h
     include/${PROJECT_NAME}/coroutines/__details/basic_promise_type.h
 
     include/${PROJECT_NAME}/algorithms/parfor.h
     include/${PROJECT_NAME}/algorithms/lfqueue.h
-
 )
 
 set(POT_SOURCES
-    src/this_thread.cpp
-    src/thread.cpp
+    src/utils/this_thread.cpp
+    
+    src/threads/thread.cpp
 
     src/executors/inline_executor.cpp
     src/executors/thread_executor.cpp
-
-    src/experimental/thread_pool/thread_pool_fpe.cpp
-
 )
 
 

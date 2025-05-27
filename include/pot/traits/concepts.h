@@ -1,7 +1,7 @@
 #pragma once
 #include <type_traits>
 
-#include <pot/coroutines/task_coroutine.h>
+#include <pot/coroutines/task.h>
 
 namespace pot::traits::concepts
 {

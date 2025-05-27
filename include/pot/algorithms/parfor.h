@@ -1,14 +1,10 @@
 #pragma once
 
-#include <cinttypes>
-#include <utility>
 #include <vector>
-#include <coroutine>
-#include <memory>
 #include <cassert>
 
-#include "pot/when_all.h"
-#include "pot/executors/thread_pool_executor.h"
+#include "pot/coroutines/when_all.h"
+#include "pot/executors/executor.h"
 
 namespace pot::algorithms
 {
@@ -18,7 +14,7 @@ namespace pot::algorithms
     {
         assert(from < to);
 
-        const int64_t numIterations = to - from + 1;
+        const int64_t numIterations = to - from;
         int64_t chunk_size = static_chunk_size;
 
         if (chunk_size < 0)
@@ -26,7 +22,7 @@ namespace pot::algorithms
 
         const int64_t numChunks = (numIterations + chunk_size - 1) / chunk_size;
         std::vector<pot::coroutines::task<void>> tasks;
-        tasks.reserve(numChunks);
+        tasks.resize(numChunks);
 
         for (int64_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex)
         {
@@ -34,22 +30,28 @@ namespace pot::algorithms
             const IndexType chunkEnd = std::min<IndexType>(chunkStart + IndexType(chunk_size), to);
 
             tasks.push_back(executor.run([chunkStart, chunkEnd, &func]() -> pot::coroutines::task<void>
-                                         {
-            for (IndexType i = chunkStart; i < chunkEnd; ++i)
             {
-                if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
+                for (IndexType i = chunkStart; i < chunkEnd; ++i)
                 {
-                    co_await func(i);
+                    if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
+                    {
+                        co_await func(i);
+                    }
+                    else
+                    {
+                        func(i);
+                    }
                 }
-                else
-                {
-                    func(i);
-                }
-            }
-            co_return; }));
+                co_return;
+            }));
         }
 
-        co_await pot::when_all(tasks.begin(), tasks.end());
+        for (auto it = tasks.begin(); it != tasks.end(); ++it)
+        {
+            if (auto task = std::move(*it)) co_await std::move(task);
+        }
+
+        // co_await pot::coroutines::when_all(tasks.begin(), tasks.end());
         co_return;
     }
 }

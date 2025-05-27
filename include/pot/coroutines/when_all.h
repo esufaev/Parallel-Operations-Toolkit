@@ -5,7 +5,7 @@
 
 #include "pot/coroutines/task.h"
 
-namespace pot
+namespace pot::coroutines
 {
     template <typename Iterator>
     pot::coroutines::task<void> when_all(Iterator begin, Iterator end)

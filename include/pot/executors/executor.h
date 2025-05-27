@@ -39,7 +39,7 @@ namespace pot
         }
 
         template <typename Func, typename... Args>
-        auto run(Func func, Args... args)
+        auto run(Func&& func, Args&&... args)
         {
             using return_type = std::invoke_result_t<Func, Args...>;
             if constexpr (pot::traits::concepts::is_task<return_type>)

@@ -4,7 +4,6 @@
 
 namespace pot::traits::compare
 {
-
     template<typename T, typename... Ts>
         requires (sizeof...(Ts) > 0)
     [[nodiscard]] constexpr bool is_one_of(T&& value, Ts&&... values)

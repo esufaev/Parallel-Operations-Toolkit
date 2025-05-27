@@ -3,8 +3,7 @@
 #include <thread>
 #include <chrono>
 
-#include "pot/executor.h"
-
+#include "pot/executors/executor.h"
 
 namespace pot::details::this_thread
 {
@@ -14,7 +13,6 @@ namespace pot::details::this_thread
     inline thread_local int64_t tl_global_id; // Global identifier across all executors
     inline thread_local std::weak_ptr<executor> tl_owner_executor;
 }
-
 
 namespace pot::this_thread
 {

@@ -1280,6 +1280,4 @@ namespace pot::simd
 
 
     }
-
-
 } // namespace pot::simd

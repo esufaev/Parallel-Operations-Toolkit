@@ -6,7 +6,7 @@
 #include <condition_variable>
 #include <functional>
 
-#include "pot/executor.h"
+#include "pot/executors/executor.h"
 
 namespace pot::executors
 {
