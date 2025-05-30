@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <functional>
 #include <cassert>
 
 #include "pot/coroutines/when_all.h"
@@ -10,7 +11,7 @@ namespace pot::algorithms
 {
     template <int64_t static_chunk_size = -1, typename IndexType, typename FuncType = void(IndexType)>
         requires std::invocable<FuncType, IndexType>
-    pot::coroutines::task<void> parfor(pot::executor &executor, IndexType from, IndexType to, FuncType &&func)
+    pot::coroutines::lazy_task<void> parfor(pot::executor &executor, IndexType from, IndexType to, FuncType &&func)
     {
         assert(from < to);
 
@@ -22,7 +23,7 @@ namespace pot::algorithms
 
         const int64_t numChunks = (numIterations + chunk_size - 1) / chunk_size;
         std::vector<pot::coroutines::task<void>> tasks;
-        tasks.resize(numChunks);
+        tasks.reserve(numChunks);
 
         for (int64_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex)
         {
@@ -33,25 +34,14 @@ namespace pot::algorithms
             {
                 for (IndexType i = chunkStart; i < chunkEnd; ++i)
                 {
-                    if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>)
-                    {
-                        co_await func(i);
-                    }
-                    else
-                    {
-                        func(i);
-                    }
+                    if constexpr (std::is_invocable_r_v<pot::coroutines::task<void>, FuncType, IndexType>) { co_await std::invoke(func, i); }
+                    else { std::invoke(func, i); }
                 }
-                co_return;
+                co_return; 
             }));
         }
 
-        for (auto it = tasks.begin(); it != tasks.end(); ++it)
-        {
-            if (auto task = std::move(*it)) co_await std::move(task);
-        }
-
-        // co_await pot::coroutines::when_all(tasks.begin(), tasks.end());
+        co_await pot::coroutines::when_all(tasks.begin(), tasks.end());
         co_return;
     }
 }

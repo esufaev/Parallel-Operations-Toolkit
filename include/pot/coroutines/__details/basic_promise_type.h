@@ -26,9 +26,6 @@ namespace pot::coroutine::__details
             m_data.template emplace<T>(std::forward<U>(value));
             if (m_ready.exchange(true, std::memory_order_release))
                 throw std::runtime_error("Value already set in promise_type.");
-            if (m_continuation)
-                m_continuation.resume();
-            m_continuation = nullptr;
         }
 
         void set_value()
@@ -39,9 +36,6 @@ namespace pot::coroutine::__details
             {
                 throw std::runtime_error("Value already set in promise_type.");
             }
-            if (m_continuation)
-                m_continuation.resume();
-            m_continuation = nullptr;
         }
 
         void set_exception(std::exception_ptr ex)
@@ -51,9 +45,6 @@ namespace pot::coroutine::__details
             {
                 throw std::runtime_error("Exception already set in promise_type.");
             }
-            if (m_continuation)
-                m_continuation.resume();
-            m_continuation = nullptr;
         }
 
         bool is_ready() const noexcept { return m_ready.load(std::memory_order_acquire); }
@@ -85,10 +76,7 @@ namespace pot::coroutine::__details
                 std::this_thread::yield();
         }
 
-        static constexpr std::suspend_never initial_suspend() noexcept { return {}; }
-        static constexpr std::suspend_always final_suspend() noexcept { return {}; }
-
-    private:
+    protected:
         std::atomic<bool> m_ready{false};
         variant_type m_data{std::monostate{}};
         coro_t m_continuation;
