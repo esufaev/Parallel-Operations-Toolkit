@@ -4,12 +4,13 @@ include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 # Create test executable
 set(TEST_SOURCES
   test_coro.cpp
+  # test_executor.cpp
 )
 
 add_executable(tests ${TEST_SOURCES})
 target_link_libraries(tests PRIVATE pot Catch2::Catch2WithMain)
 
-target_compile_options(tests PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+target_compile_options(tests PRIVATE -O2 -fsanitize=address -fno-omit-frame-pointer)
 target_link_options(tests PRIVATE -fsanitize=address)
 
 # apply_warning_flags_to_targets(tests) # Apply warning flags

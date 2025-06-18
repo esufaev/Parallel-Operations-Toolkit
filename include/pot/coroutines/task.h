@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pot/coroutines/__details/basic_promise_type.h"
+#include <assert.h>
 
 namespace pot::coroutines
 {
@@ -77,17 +78,15 @@ namespace pot::coroutines
         bool await_ready() const noexcept { return m_handle && m_handle.done(); }
         void await_suspend(coro_t continuation) noexcept
         {
-            if (!m_handle)
-            {
-                m_handle.promise().set_continuation(continuation);
-                return;
-            }
+            assert(m_handle);
+            m_handle.promise().set_continuation(continuation);
 
             try
             {
-                m_handle.promise().set_continuation(continuation);
-                if (!m_handle.done()) { m_handle.resume(); }
-                else { continuation.resume(); }
+                if constexpr (Lazy)
+                {
+                    if (!m_handle.done()) m_handle.resume(); 
+                }
             }
             catch (...)
             {
@@ -95,6 +94,7 @@ namespace pot::coroutines
                 continuation.resume();
             }
         }
+
         T await_resume()
         {
             if (!m_handle)
