@@ -19,7 +19,7 @@ option(POT_CHECK_WARNINGS    "Strict compiler checks" ON )
 add_compile_definitions(_SILENCE_ALL_CXX23_DEPRECATION_WARNINGS)
 
 # Apply compiler flags
-include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/CompilerFlags.cmake)
 apply_compiler_flags()
 
 set(POT_HEADERS
@@ -35,18 +35,23 @@ set(POT_HEADERS
         
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/platform.h
-    include/${PROJECT_NAME}/utils/this_thread.h
+    # include/${PROJECT_NAME}/utils/this_thread.h
     include/${PROJECT_NAME}/utils/cache_line.h
     
     include/${PROJECT_NAME}/executors/executor.h
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
-    include/${PROJECT_NAME}/executors/thread_pool_executor_lfgq.h
     include/${PROJECT_NAME}/executors/thread_pool_executor.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor_lfgq.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor_gq.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor_lflq.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor_lq.h
+
     
     include/${PROJECT_NAME}/coroutines/task.h
     include/${PROJECT_NAME}/coroutines/async_condition_variable.h
     include/${PROJECT_NAME}/coroutines/when_all.h
+    include/${PROJECT_NAME}/coroutines/async_barrier.h
     include/${PROJECT_NAME}/coroutines/__details/basic_promise_type.h
 
     include/${PROJECT_NAME}/algorithms/parfor.h
@@ -54,7 +59,7 @@ set(POT_HEADERS
 )
 
 set(POT_SOURCES
-    src/utils/this_thread.cpp
+    # src/utils/this_thread.cpp
     
     src/threads/thread.cpp
 
