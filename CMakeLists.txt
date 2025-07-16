@@ -102,7 +102,7 @@ install(TARGETS ${PROJECT_NAME}
 
 
 # Testing
-if(POT_BUILD_TESTS)
+if(POT_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     enable_testing()
     add_subdirectory(test)
 endif()
