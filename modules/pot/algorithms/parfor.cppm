@@ -1,14 +1,40 @@
-#pragma once
+module;
 
+#include "pot/utils/platform.h"
+
+#if defined(POT_COMPILER_MSVC)
+
+import <algorithm>;
+import <vector>;
+import <functional>;
+import <cassert>;
+import <memory>;
+import <cstdint>;
+import <type_traits>;
+import <iostream>;
+import <utility>;
+
+#else
+
+#include <algorithm>
 #include <vector>
 #include <functional>
 #include <cassert>
 #include <memory>
+#include <cstdint>
+#include <type_traits>
+#include <iostream>
+#include <utility>
 
-#include "pot/coroutines/when_all.h"
-#include "pot/executors/executor.h"
+#endif
 
-namespace pot::algorithms
+export module pot.algorithms.parfor;
+
+import pot.coroutines.when_all;
+import pot.executors.executor;
+import pot.coroutines.task;
+
+export namespace pot::algorithms
 {
     template <int64_t static_chunk_size = -1, typename IndexType, typename FuncType = void(IndexType)>
         requires std::invocable<FuncType &, IndexType>

@@ -110,6 +110,6 @@ namespace pot::executors
         mode_type<empty_type, std::atomic_uint64_t> m_current_thread;
     };
 
-    using thread_pool_executor_gq = thread_pool_executor<true>;
-    using thread_pool_executor_lq = thread_pool_executor<false>;
+    using thread_pool_executor_ogq = thread_pool_executor<true>;
+    using thread_pool_executor_olq = thread_pool_executor<false>;
 }

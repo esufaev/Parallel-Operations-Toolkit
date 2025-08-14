@@ -1,41 +1,20 @@
+module;
+
 #include <thread>
 #include <vector>
 #include <atomic>
 #include <stdexcept>
 #include <functional>
 
-#include "pot/algorithms/lfqueue.h"
-#include "pot/executors/executor.h"
+export module pot.executors.thread_pool_executor;
 
-namespace pot::executors
+import pot.algorithms.lfqueue;
+import pot.executors.executor;
+
+export namespace pot::executors
 {
     class thread_pool_executor_lfgq : public executor
     {
-    private:
-        std::vector<std::thread> workers;
-        algorithms::lfqueue<std::function<void()>> queue;
-        std::atomic<bool> shutdown_flag;
-
-        void worker_loop()
-        {
-            while (true)
-            {
-                if (shutdown_flag.load(std::memory_order_acquire) && queue.is_empty())
-                {
-                    break;
-                }
-                std::function<void()> task;
-                if (queue.pop(task))
-                {
-                    task();
-                }
-                else
-                {
-                    std::this_thread::yield();
-                }
-            }
-        }
-
     public:
         thread_pool_executor_lfgq(const std::string &name,
                                   size_t thread_count = std::thread::hardware_concurrency(),
@@ -81,6 +60,31 @@ namespace pot::executors
         thread_pool_executor_lfgq &operator=(const thread_pool_executor_lfgq &) = delete;
         thread_pool_executor_lfgq(thread_pool_executor_lfgq &&) = delete;
         thread_pool_executor_lfgq &operator=(thread_pool_executor_lfgq &&) = delete;
+
+    private:
+        std::vector<std::thread> workers;
+        algorithms::lfqueue<std::function<void()>> queue;
+        std::atomic<bool> shutdown_flag;
+
+        void worker_loop()
+        {
+            while (true)
+            {
+                if (shutdown_flag.load(std::memory_order_acquire) && queue.is_empty())
+                {
+                    break;
+                }
+                std::function<void()> task;
+                if (queue.pop(task))
+                {
+                    task();
+                }
+                else
+                {
+                    std::this_thread::yield();
+                }
+            }
+        }
     };
 
 } // namespace pot

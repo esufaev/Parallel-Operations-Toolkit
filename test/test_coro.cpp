@@ -1,160 +1,187 @@
+import pot.coroutines.task;
+import pot.coroutines.when_all;
+import pot.executors.thread_pool_executor;
+import pot.algorithms.parfor;
+import pot.coroutines.async_condition_variable;
+
+// #include "pot/coroutines/task.h"
+// #include "pot/coroutines/when_all.h"
+// #include "pot/executors/thread_pool_executor_lfgq.h"
+// #include "pot/algorithms/parfor.h"
+// #include "pot/coroutines/async_condition_variable.h"
+
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_all.hpp>
 
-#include <iostream>
-#include <vector>
+#include <atomic>
 #include <chrono>
+#include <coroutine>
+#include <cstdint>
+#include <stdexcept>
 #include <thread>
+#include <vector>
+#include <numeric>
+#include <type_traits>
 
-#include "pot/algorithms/parfor.h"
-#include "pot/executors/thread_pool_executor_lfgq.h"
-#include "pot/coroutines/task.h"
+pot::coroutines::task<int> add_one_task(int x) { co_return x + 1; }
+pot::coroutines::lazy_task<int> add_one_lazy(int x) { co_return x + 1; }
 
-TEST_CASE("CO_AWAIT LAZY TEST")
+using pot::coroutines::task;
+using pot::coroutines::lazy_task;
+
+TEST_CASE("task<int> returns value via get() and await", "[task]")
 {
-    auto inner_task_val = []() -> pot::coroutines::lazy_task<int>
+    auto t = []() -> task<int> { co_return 42; }();
+    REQUIRE(t.get() == 42);
+
+    auto outer = [&]() -> task<int>
     {
-        std::cout << "inner_task started" << std::endl;
-        co_return 42;
+        int v = co_await []() -> task<int> { co_return 100; }();
+        co_return v + 1;
+    }();
+    REQUIRE(outer.get() == 101);
+}
+
+TEST_CASE("task propagates exceptions through get()/await", "[task]")
+{
+    auto failing = []() -> task<int>
+    {
+        throw std::runtime_error("boom");
+        co_return 0;
+    }();
+
+    REQUIRE_THROWS_AS(failing.get(), std::runtime_error);
+
+    auto proxy = [&]() -> task<void>
+    {
+        try
+        {
+            (void)co_await []() -> task<int>
+            {
+                throw std::logic_error("bad");
+                co_return 0;
+            }();
+            FAIL("exception not thrown");
+        }
+        catch (const std::logic_error &)
+        {
+            co_return;
+        }
+    }();
+    REQUIRE_NOTHROW(proxy.get());
+}
+
+TEST_CASE("lazy_task is lazy until get()/await", "[lazy_task]")
+{
+    std::atomic<bool> started{false};
+    auto make = [&]() -> lazy_task<int>
+    {
+        started.store(true, std::memory_order_relaxed);
+        co_return 7;
+    };
+    auto lt = make();
+
+    REQUIRE(started.load(std::memory_order_relaxed) == false);
+    REQUIRE(lt.get() == 7);
+    REQUIRE(started.load(std::memory_order_relaxed) == true);
+}
+
+TEST_CASE("lazy_task<void> await + continuation resumes caller", "[lazy_task]")
+{
+    std::atomic<int> seq{0};
+
+    auto child = [&]() -> lazy_task<void>
+    {
+        seq.fetch_add(1, std::memory_order_relaxed);
+        co_return;
     };
 
-    auto outer_task_val = [&]() -> pot::coroutines::lazy_task<int>
+    auto parent = [&]() -> task<int>
     {
-        std::cout << "outer_task started" << std::endl;
-        int result = co_await inner_task_val();
-        std::cout << "outer_task finished" << std::endl;
-        co_return result;
+        seq.fetch_add(1, std::memory_order_relaxed);
+        co_await child();
+        seq.fetch_add(1, std::memory_order_relaxed);
+        co_return seq.load(std::memory_order_relaxed);
+    }();
+
+    REQUIRE(parent.get() == 3);
+}
+
+TEST_CASE("parfor processes all indices (void functor)", "[parfor]")
+{
+    pot::executors::thread_pool_executor_lfgq ex("Main");
+    const int N = 1000;
+    std::vector<int> data(N, 0);
+
+    auto set_i = [&](int i)
+    {
+        data[static_cast<std::size_t>(i)] = i;
     };
 
-    REQUIRE(outer_task_val().get() == 42);
+    auto task_par = pot::algorithms::parfor(ex, 0, N, set_i);
+    REQUIRE_NOTHROW(task_par.get());
 
-    auto inner_task_void = []() -> pot::coroutines::lazy_task<void>
+    for (int i = 0; i < N; ++i)
     {
-        std::cout << "inner_task" << std::endl;
+        REQUIRE(data[static_cast<std::size_t>(i)] == i);
+    }
+}
+
+TEST_CASE("parfor supports functor returning task<void>", "[parfor]")
+{
+    pot::executors::thread_pool_executor_lfgq ex("Main");
+    const int N = 512;
+    std::atomic<int> sum{0};
+
+    auto body_task = [&](int i) -> task<void>
+    {
+        sum.fetch_add(i, std::memory_order_relaxed);
         co_return;
     };
 
-    auto outer_task_void = [&]() -> pot::coroutines::lazy_task<void>
+    auto lt = pot::algorithms::parfor(ex, 0, N, body_task);
+    lt.get();
+
+    const long long expected = 1LL * N * (N - 1) / 2;
+    REQUIRE(sum.load(std::memory_order_relaxed) == expected);
+}
+
+TEST_CASE("parfor respects chunking math (small ranges)", "[parfor]")
+{
+    pot::executors::thread_pool_executor_lfgq ex("Main");
+
+    const int from = 5, to = 13; 
+    std::vector<int> out(to - from, -1);
+
+    auto body = [&](int i)
     {
-        std::cout << "outer_task started" << std::endl;
-        co_await inner_task_void();
-        std::cout << "outer_task finished" << std::endl;
+        out[static_cast<std::size_t>(i - from)] = i * 2;
+    };
+
+    auto lt = pot::algorithms::parfor(ex, from, to, body);
+    lt.get();
+
+    for (int i = 0; i < (to - from); ++i)
+    {
+        REQUIRE(out[static_cast<std::size_t>(i)] == (from + i) * 2);
+    }
+}
+
+TEST_CASE("parfor works with lazy functor returning lazy_task<void>", "[parfor][lazy]")
+{
+    pot::executors::thread_pool_executor_lfgq ex("Main");
+
+    const int N = 64;
+    std::atomic<int> cnt{0};
+
+    auto lazy_body = [&](int /*i*/) -> lazy_task<void>
+    {
+        cnt.fetch_add(1, std::memory_order_relaxed);
         co_return;
     };
 
-    outer_task_void().get();
-}
+    auto lt = pot::algorithms::parfor(ex, 0, N, lazy_body);
+    lt.get();
 
-TEST_CASE("GET LAZY TEST")
-{
-    auto future = []() -> pot::coroutines::lazy_task<int>
-    {
-        std::cout << "future started" << std::endl;
-        co_return 42;
-    }();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "future created" << std::endl;
-    REQUIRE(future.get() == 42);
-}
-
-TEST_CASE("GET TEST")
-{
-    auto future = []() -> pot::coroutines::task<int>
-    {
-        std::cout << "future started" << std::endl;
-        co_return 42;
-    }();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "future created" << std::endl;
-    REQUIRE(future.get() == 42);
-}
-
-TEST_CASE("GET VOID TEST")
-{
-    auto future = []() -> pot::coroutines::task<void>
-    {
-        std::cout << "future started" << std::endl;
-        co_return;
-    }();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "future created" << std::endl;
-    future.get();
-}
-
-TEST_CASE("GET LAZY VOID TEST")
-{
-    auto future = []() -> pot::coroutines::lazy_task<void>
-    {
-        std::cout << "future started" << std::endl;
-        co_return;
-    }();
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "future created" << std::endl;
-    future.get();
-}
-
-TEST_CASE("PARFOR VOID TEST")
-{
-    pot::executors::thread_pool_executor_lfgq pool("Main");
-
-    auto task = pot::algorithms::parfor(pool, 0, 3, [](int i)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        std::cout << "i: " << i << std::endl;
-    });
-
-    task.get();
-    std::cout << "DONE" << std::endl;
-}
-
-TEST_CASE("PARFOR VOID CORO TEST")
-{
-    const int64_t from = 0;
-    const int64_t to = 100;
-
-    std::atomic<int64_t> sum = 0;
-
-    pot::executors::thread_pool_executor_lfgq pool("Main");
-
-    auto task = pot::algorithms::parfor(pool, from, to, [](int i) -> pot::coroutines::task<void>
-    { 
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        printf("I: %d\n\r", i);
-        co_return;
-    });
-
-    task.get();
-    std::cout << "DONE" << std::endl;
-}
-
-TEST_CASE("PARFOR CAPTURED LAMBDA TEST")
-{
-    std::atomic<int> counter = 0;
-    pot::executors::thread_pool_executor_lfgq pool("Main");
-    auto task = pot::algorithms::parfor(pool, 0, 1000, [&counter](int i)
-    {
-        printf("I: %d\n\r", i);
-        counter.fetch_add(1); 
-    });
-    task.get();
-    std::cout << "DONE" << std::endl;
-    std::cout << counter.load() << std::endl;
-    REQUIRE(counter.load() == 1000);
-}
-
-TEST_CASE("PARFOR CAPTURED LAMBDA CORO TEST")
-{
-    std::atomic<int> counter = 0;   
-
-    pot::executors::thread_pool_executor_lfgq pool("Main");
-    auto task = pot::algorithms::parfor(pool, 0, 1000, [&counter](int i) -> pot::coroutines::task<void>
-    {
-        std::cout << "i: " << i << std::endl;
-        counter.fetch_add(1);
-        co_return;
-    });
-
-    task.get();
-    std::cout << "DONE" << std::endl;
-
-    REQUIRE(counter.load() == 1000);
+    REQUIRE(cnt.load(std::memory_order_relaxed) == N);
 }

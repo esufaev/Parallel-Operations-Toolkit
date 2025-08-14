@@ -1,4 +1,18 @@
-#pragma once
+module;
+
+#include "pot/utils/platform.h"
+
+#if defined(POT_COMPILER_MSVC)
+
+import <atomic>;
+import <variant>;
+import <coroutine>;
+import <thread>;
+import <stdexcept>;
+import <type_traits>;
+import <utility>;
+
+#else
 
 #include <atomic>
 #include <variant>
@@ -7,6 +21,10 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+
+#endif
+
+export module pot.coroutines.task;
 
 namespace pot::coroutines::detail
 {
@@ -85,7 +103,7 @@ namespace pot::coroutines::detail
     };
 } // namespace pot::coroutines::detail
 
-namespace pot::coroutines
+export namespace pot::coroutines
 {
     template <typename T>
     struct promise_type_impl;
@@ -326,7 +344,7 @@ namespace pot::coroutines
 
 } // namespace pot::coroutines
 
-namespace std
+export namespace std
 {
     template <typename T, typename... Args>
     struct coroutine_traits<pot::coroutines::task<T>, Args...>
@@ -341,7 +359,7 @@ namespace std
     };
 }
 
-namespace pot::traits
+export namespace pot::traits
 {
     template <typename T>
     struct is_task : std::false_type

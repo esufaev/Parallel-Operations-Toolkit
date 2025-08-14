@@ -1,12 +1,25 @@
-#pragma once
+module;
+
+#include "pot/utils/platform.h"
+#include "pot/utils/cache_line.h"
+
+#if defined(POT_COMPILER_MSVC)
+
+import <atomic>
+import <thread>
+import <vector>
+
+#else
 
 #include <atomic>
 #include <thread>
 #include <vector>
 
-#include "pot/utils/cache_line.h"
+#endif
 
-namespace pot::algorithms
+export module pot.algorithms.lfqueue;
+
+export namespace pot::algorithms
 {
     template <typename T>
     class alignas(pot::cache_line_alignment) lfqueue

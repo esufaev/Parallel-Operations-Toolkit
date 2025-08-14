@@ -1,9 +1,18 @@
-#pragma once 
+module;
 
-#include <coroutine>
-#include <atomic>
+#include "pot/utils/platform.h"
 
-namespace pot::coroutines
+#if defined(POT_COMPILER_MSVC)
+    import <coroutine>;
+    import <atomic>;
+#else
+    #include <coroutine>
+    #include <atomic>
+#endif
+
+export module pot.coroutines.async_condition_variable;
+
+export namespace pot::coroutines
 {
     using coro_t = std::coroutine_handle<>;
 

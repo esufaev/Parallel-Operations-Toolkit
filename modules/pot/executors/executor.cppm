@@ -1,13 +1,29 @@
-#pragma once
+module;
+
+#if defined(POT_COMPILER_MSVC)
+
+import <string>;
+import <functional>;
+import <utility>;
+import <type_traits>;
+import <coroutine>;
+
+#else
 
 #include <string>
 #include <functional>
-#include <memory>
+#include <utility>
+#include <type_traits>
+#include <coroutine>
 
-#include "pot/coroutines/task.h"
-#include "pot/coroutines/async_condition_variable.h"
+#endif
 
-namespace pot
+
+export module pot.executors.executor;
+
+import pot.coroutines.task;
+
+export namespace pot
 {
     class executor
     {
@@ -108,4 +124,4 @@ namespace pot
             }
         }
     };
-}
+} // namespace pot
