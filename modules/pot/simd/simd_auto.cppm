@@ -1,11 +1,14 @@
-#pragma once
+module;
 
 #include <math.h>
 #include <cassert> 
+#include <cstddef>
+#include <immintrin.h>
 
-#include "pot/simd/simd_traits.h"
+import pot.simd.traits;
+export module pot.simd.simd_auto;
 
-namespace pot::simd
+export namespace pot::simd
 {
     template <simdable scalar_type, size_t scalar_count>
     class simd_auto
