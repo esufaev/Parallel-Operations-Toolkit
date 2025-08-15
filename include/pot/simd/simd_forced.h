@@ -35,8 +35,8 @@ namespace pot::simd
         void store(scalar_type* ptr) const { trait::store(ptr, m_value); }
         void storeu(scalar_type* ptr) const { trait::storeu(ptr, m_value); }
 
-        static simd_forced zeros() const { return simd_forced(scalar_type(0)); }
-        static simd_forced ones() const { return simd_forced(scalar_type(1)); }
+        static simd_forced zeros() { return simd_forced(scalar_type(0)); }
+        static simd_forced ones()  { return simd_forced(scalar_type(1)); }
 
         scalar_type max  () const { return trait::max_scalar(m_value); }
         simd_forced max  (const simd_forced& other) const { return trait::max(m_value, other.m_value); }
@@ -86,12 +86,12 @@ namespace pot::simd
         bool operator> (const simd_forced& rhs) const { return trait::cmpgt_bool (m_value, rhs.m_value); }
         bool operator>=(const simd_forced& rhs) const { return trait::cmpge_bool (m_value, rhs.m_value); }
 
-        simd_forced operator==(const simd_forced& rhs) const { return trait::cmpeq (m_value, rhs.m_value); }
-        simd_forced operator!=(const simd_forced& rhs) const { return trait::cmpneq(m_value, rhs.m_value); }
-        simd_forced operator< (const simd_forced& rhs) const { return trait::cmplt (m_value, rhs.m_value); }
-        simd_forced operator<=(const simd_forced& rhs) const { return trait::cmple (m_value, rhs.m_value); }
-        simd_forced operator> (const simd_forced& rhs) const { return trait::cmpgt (m_value, rhs.m_value); }
-        simd_forced operator>=(const simd_forced& rhs) const { return trait::cmpge (m_value, rhs.m_value); }
+        // simd_forced operator==(const simd_forced& rhs) const { return trait::cmpeq (m_value, rhs.m_value); }
+        // simd_forced operator!=(const simd_forced& rhs) const { return trait::cmpneq(m_value, rhs.m_value); }
+        // simd_forced operator< (const simd_forced& rhs) const { return trait::cmplt (m_value, rhs.m_value); }
+        // simd_forced operator<=(const simd_forced& rhs) const { return trait::cmple (m_value, rhs.m_value); }
+        // simd_forced operator> (const simd_forced& rhs) const { return trait::cmpgt (m_value, rhs.m_value); }
+        // simd_forced operator>=(const simd_forced& rhs) const { return trait::cmpge (m_value, rhs.m_value); }
 
         simd_forced operator~() const { return trait::not_(m_value); }
         simd_forced operator-() const { return trait::neg(m_value); }

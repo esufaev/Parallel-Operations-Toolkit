@@ -1,10 +1,10 @@
 #pragma once
 
+#include <immintrin.h>
 #include <cinttypes>
 #include <utility>
 
 #include "pot/traits/compare.h"
-
 
 namespace pot::simd
 {
@@ -44,11 +44,9 @@ namespace pot::simd
         template<simdable scalar_type>
         struct simd_traits<scalar_type, SIMDType::SSE>
         {
-            static constexpr size_t scalar_count = byteness(simd_type) / sizeof(scalar_type);
-            using scalar_type = scalar_type;
+            static constexpr size_t scalar_count = byteness(SIMDType::SSE) / sizeof(scalar_type);
             using vector_type = std::conditional_t<std::is_same_v<scalar_type, float>, __m128,
-                std::conditional_t<std::is_same_v<scalar_type, double>, __m128d,
-                __m128i>>;
+                std::conditional_t<std::is_same_v<scalar_type, double>, __m128d, __m128i>>;
 
             static constexpr auto mask()
             {
@@ -59,9 +57,9 @@ namespace pot::simd
 
             static decltype(auto) get(const vector_type& a, size_t index)
             {
-                if constexpr (std::is_same_v<vector_type, __m128 >) return ((scalar_type*)&a)[index];
-                if constexpr (std::is_same_v<vector_type, __m128d>) return ((scalar_type*)&a)[index];
-                if constexpr (std::is_same_v<vector_type, __m128i>) return ((scalar_type*)&a)[index];
+                if constexpr (std::is_same_v<vector_type, __m128 >) return (static_cast<scalar_type*>(&a))[index];
+                if constexpr (std::is_same_v<vector_type, __m128d>) return (static_cast<scalar_type*>(&a))[index];
+                if constexpr (std::is_same_v<vector_type, __m128i>) return (static_cast<scalar_type*>(&a))[index];
             }
 
             static auto set1(scalar_type value)
@@ -75,27 +73,27 @@ namespace pot::simd
             {
                 if constexpr (std::is_same_v<vector_type, __m128 >) return _mm_store_ps(ptr, value);
                 if constexpr (std::is_same_v<vector_type, __m128d>) return _mm_store_pd(ptr, value);
-                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_store_si128((__m128i*)ptr, value);
+                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_store_si128(static_cast<__m128i*>(ptr), value);
             }
             static auto storeu(scalar_type* ptr, vector_type value)
             {
                 if constexpr (std::is_same_v<vector_type, __m128 >) return _mm_storeu_ps(ptr, value);
                 if constexpr (std::is_same_v<vector_type, __m128d>) return _mm_storeu_pd(ptr, value);
-                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_storeu_si128((__m128i*)ptr, value);
+                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_storeu_si128(static_cast<__m128i*>(ptr), value);
             }
 
             static auto load(const scalar_type* ptr)
             {
                 if constexpr (std::is_same_v<vector_type, __m128 >) return _mm_load_ps(ptr);
                 if constexpr (std::is_same_v<vector_type, __m128d>) return _mm_load_pd(ptr);
-                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_load_si128((__m128i*)ptr);
+                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_load_si128(static_cast<__m128i*>(ptr));
             }
 
             static auto loadu(const scalar_type* ptr)
             {
                 if constexpr (std::is_same_v<vector_type, __m128 >) return _mm_loadu_ps(ptr);
                 if constexpr (std::is_same_v<vector_type, __m128d>) return _mm_loadu_pd(ptr);
-                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_loadu_si128((__m128i*)ptr);
+                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_loadu_si128(static_cast<__m128i*>(ptr));
             }
 
             static auto max(const vector_type& a, const vector_type& b)
@@ -420,14 +418,14 @@ namespace pot::simd
             {
                 if constexpr (std::is_same_v<vector_type, __m128 >) return _mm_slli_epi32(a, b);
                 if constexpr (std::is_same_v<vector_type, __m128d>) return _mm_slli_epi64(a, b);
-                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_slli_si128(a, b);
+                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_slli_epi128(a, b);
             }
             // operator >>
             static auto shr(const vector_type& a, int b)
             {
                 if constexpr (std::is_same_v<vector_type, __m128 >) return _mm_srli_epi32(a, b);
                 if constexpr (std::is_same_v<vector_type, __m128d>) return _mm_srli_epi64(a, b);
-                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_srli_si128(a, b);
+                if constexpr (std::is_same_v<vector_type, __m128i>) return _mm_srli_epi128(a, b);
             }
 
             // operator~
@@ -544,8 +542,7 @@ namespace pot::simd
         template<simdable scalar_type>
         struct simd_traits<scalar_type, SIMDType::AVX>
         {
-            static constexpr size_t scalar_count = byteness(simd_type) / sizeof(scalar_type);
-            using scalar_type = scalar_type;
+            static constexpr size_t scalar_count = byteness(SIMDType::AVX) / sizeof(scalar_type);
             using vector_type = std::conditional_t<std::is_same_v<scalar_type, float>, __m256,
                 std::conditional_t<std::is_same_v<scalar_type, double>, __m256d,
                 __m256i>>;
@@ -557,11 +554,17 @@ namespace pot::simd
                 if constexpr (std::is_same_v<vector_type, __m256i>) return (1ULL << scalar_count) - 1;
             }
 
+            template<int Index>
+            static inline int extract_epi32(__m256i a) {
+                static_assert(0 <= Index && Index < 8, "lane out of range");
+                return _mm256_extract_epi32(a, Index);
+            }
+
             static decltype(auto) get(const vector_type& a, size_t index)
             {
                 if constexpr (std::is_same_v<vector_type, __m256 >) return _mm256_extract_ps(a, index);
                 if constexpr (std::is_same_v<vector_type, __m256d>) return _mm256_extract_pd(a, index);
-                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_extract_epi32(a, index);
+                if constexpr (std::is_same_v<vector_type, __m256i>) return extract_epi32(a, index); // временно 
             }
 
             static auto set1(scalar_type value)
@@ -575,28 +578,28 @@ namespace pot::simd
             {
                 if constexpr (std::is_same_v<vector_type, __m256 >) return _mm256_store_ps(ptr, value);
                 if constexpr (std::is_same_v<vector_type, __m256d>) return _mm256_store_pd(ptr, value);
-                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_store_si256((__m256i*)ptr, value);
+                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_store_si256(static_cast<__m256i*>(ptr), value);
             }
 
             static auto storeu(scalar_type* ptr, vector_type value)
             {
                 if constexpr (std::is_same_v<vector_type, __m256 >) return _mm256_storeu_ps(ptr, value);
                 if constexpr (std::is_same_v<vector_type, __m256d>) return _mm256_storeu_pd(ptr, value);
-                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_storeu_si256((__m256i*)ptr, value);
+                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_storeu_si256(static_cast<__m256i*>(ptr), value);
             }
 
             static auto load(const scalar_type* ptr)
             {
                 if constexpr (std::is_same_v<vector_type, __m256 >) return _mm256_load_ps(ptr);
                 if constexpr (std::is_same_v<vector_type, __m256d>) return _mm256_load_pd(ptr);
-                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_load_si256((__m256i*)ptr);
+                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_load_si256(static_cast<__m256i*>(ptr));
             }
 
             static auto loadu(const scalar_type* ptr)
             {
                 if constexpr (std::is_same_v<vector_type, __m256 >) return _mm256_loadu_ps(ptr);
                 if constexpr (std::is_same_v<vector_type, __m256d>) return _mm256_loadu_pd(ptr);
-                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_loadu_si256((__m256i*)ptr);
+                if constexpr (std::is_same_v<vector_type, __m256i>) return _mm256_loadu_si256(static_cast<__m256i*>(ptr));
             }
 
             static auto max(const vector_type& a, const vector_type& b)
@@ -1016,8 +1019,7 @@ namespace pot::simd
         template<simdable scalar_type>
         struct simd_traits<scalar_type, SIMDType::AVX512>
         {
-            static constexpr size_t scalar_count = byteness(simd_type) / sizeof(scalar_type);
-            using scalar_type = scalar_type;
+            static constexpr size_t scalar_count = byteness(SIMDType::AVX512) / sizeof(scalar_type);
             using vector_type = std::conditional_t<std::is_same_v<scalar_type, float>, __m512,
                 std::conditional_t<std::is_same_v<scalar_type, double>, __m512d,
                 __m512i>>;
@@ -1047,28 +1049,28 @@ namespace pot::simd
             {
                 if constexpr (std::is_same_v<vector_type, __m512 >) return _mm512_store_ps(ptr, value);
                 if constexpr (std::is_same_v<vector_type, __m512d>) return _mm512_store_pd(ptr, value);
-                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_store_si512((__m512i*)ptr, value);
+                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_store_si512(static_cast<__m512i*>(ptr), value);
             }
 
             static auto storeu(scalar_type* ptr, vector_type value)
             {
                 if constexpr (std::is_same_v<vector_type, __m512 >) return _mm512_storeu_ps(ptr, value);
                 if constexpr (std::is_same_v<vector_type, __m512d>) return _mm512_storeu_pd(ptr, value);
-                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_storeu_si512((__m512i*)ptr, value);
+                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_storeu_si512(static_cast<__m512i*>(ptr), value);
             }
 
             static auto load(const scalar_type* ptr)
             {
                 if constexpr (std::is_same_v<vector_type, __m512 >) return _mm512_load_ps(ptr);
                 if constexpr (std::is_same_v<vector_type, __m512d>) return _mm512_load_pd(ptr);
-                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_load_si512((__m512i*)ptr);
+                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_load_si512(static_cast<__m512i*>(ptr));
             }
 
             static auto loadu(const scalar_type* ptr)
             {
                 if constexpr (std::is_same_v<vector_type, __m512 >) return _mm512_loadu_ps(ptr);
                 if constexpr (std::is_same_v<vector_type, __m512d>) return _mm512_loadu_pd(ptr);
-                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_loadu_si512((__m512i*)ptr);
+                if constexpr (std::is_same_v<vector_type, __m512i>) return _mm512_loadu_si512(static_cast<__m512i*>(ptr));
             }
 
             static auto max(const vector_type& a, const vector_type& b)
