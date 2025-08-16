@@ -16,14 +16,14 @@ namespace pot::algorithms
     {
         constexpr size_t lane_width = pot::simd::details::simd_traits<T, ST>::scalar_count;
 
-        if (n == 0) co_return T(0);
+        if (n == 0) co_return static_cast<T>(0);
 
         const size_t block_count = std::min<size_t>(std::max(size_t(1), exec.thread_count()), std::max<size_t>(size_t(1), n / lane_width));
         const size_t elems_per_block = std::max(lane_width, (n + block_count - 1) / block_count);
 
-        std::vector<T> partial_sums(block_count, T(0));
+        std::vector<T> partial_sums(block_count, static_cast<T>(0));
 
-        co_await pot::algorithms::parfor(exec, size_t(0), block_count, [=, &partial_sums](size_t block_idx)
+        co_await pot::algorithms::parfor(exec, static_cast<size_t>(0), block_count, [=, &partial_sums](size_t block_idx)
         {
             const size_t block_begin = block_idx * elems_per_block;
             const size_t block_end   = std::min(n, block_begin + elems_per_block);
@@ -61,6 +61,20 @@ namespace pot::algorithms
     dot_simd(pot::executor &exec, std::span<const T> a, std::span<const T> b) requires(std::is_arithmetic_v<T>)
     {
         if (a.size() != b.size()) throw std::invalid_argument("dot_simd: spans must have equal sizes");
+        return dot_simd<T, ST>(exec, a.data(), b.data(), a.size());
+    }
+
+    template <typename T, pot::simd::SIMDType ST> [[nodiscard]] pot::coroutines::lazy_task<T>
+    dot_simd(pot::executor &exec, const std::vector<T> &a, std::span<const T> b) requires(std::is_arithmetic_v<T>)
+    {
+        if (a.size() != b.size()) throw std::invalid_argument("dot_simd: span and vecotr must have equal sizes");
+        return dot_simd<T, ST>(exec, a.data(), b.data(), a.size());
+    }
+
+    template <typename T, pot::simd::SIMDType ST> [[nodiscard]] pot::coroutines::lazy_task<T>
+    dot_simd(pot::executor &exec, std::span<const T> a, const std::vector<T> &b) requires(std::is_arithmetic_v<T>)
+    {
+        if (a.size() != b.size()) throw std::invalid_argument("dot_simd: span and vecotr must have equal sizes");
         return dot_simd<T, ST>(exec, a.data(), b.data(), a.size());
     }
 

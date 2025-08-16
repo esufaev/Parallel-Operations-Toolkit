@@ -50,7 +50,7 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/algorithms/parfor.h
     include/${PROJECT_NAME}/algorithms/lfqueue.h
-    include/${PROJECT_NAME}/algorithms/dot_mt.h
+    include/${PROJECT_NAME}/algorithms/dot_simd.h
 )
 
 set(POT_SOURCES

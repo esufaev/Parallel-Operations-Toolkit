@@ -1,14 +1,10 @@
-import pot.coroutines.task;
-import pot.coroutines.when_all;
-import pot.executors.thread_pool_executor;
-import pot.algorithms.parfor;
-import pot.coroutines.async_condition_variable;
-
 // #include "pot/coroutines/task.h"
 // #include "pot/coroutines/when_all.h"
 // #include "pot/executors/thread_pool_executor_lfgq.h"
 // #include "pot/algorithms/parfor.h"
 // #include "pot/coroutines/async_condition_variable.h"
+
+#include "pot/pot.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_all.hpp>
