@@ -27,6 +27,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/simd/simd_forced.h
 
     include/${PROJECT_NAME}/sync/sync_object.h
+    # include/${PROJECT_NAME}/sync/async_lock.h
 
     include/${PROJECT_NAME}/traits/pot_traits.h
     include/${PROJECT_NAME}/traits/compare.h
@@ -42,15 +43,21 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/executors/thread_executor.h
     include/${PROJECT_NAME}/executors/thread_pool_executor.h
     include/${PROJECT_NAME}/executors/thread_pool_executor_lfgq.h
+    include/${PROJECT_NAME}/executors/thread_pool_executor_lflq.h
 
     include/${PROJECT_NAME}/coroutines/task.h
     include/${PROJECT_NAME}/coroutines/async_condition_variable.h
     include/${PROJECT_NAME}/coroutines/when_all.h
     include/${PROJECT_NAME}/coroutines/async_barrier.h
+    include/${PROJECT_NAME}/coroutines/resume_on.h
 
     include/${PROJECT_NAME}/algorithms/parfor.h
     include/${PROJECT_NAME}/algorithms/lfqueue.h
-    include/${PROJECT_NAME}/algorithms/dot_simd.h
+    include/${PROJECT_NAME}/algorithms/reduce.h
+    include/${PROJECT_NAME}/algorithms/dot.h
+    include/${PROJECT_NAME}/algorithms/parsections.h
+
+    include/${PROJECT_NAME}/pot.h
 )
 
 set(POT_SOURCES

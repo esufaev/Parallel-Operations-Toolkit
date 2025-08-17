@@ -5,7 +5,6 @@
 #include <cassert>
 #include <memory>
 
-#include "pot/coroutines/when_all.h"
 #include "pot/executors/executor.h"
 
 namespace pot::algorithms
