@@ -335,59 +335,286 @@ auto first = tasks.begin();
 auto last  = tasks.end();
 co_await pot::coroutines::when_all(first, last);
 ```
-## Скалярное произведение
-Высокопроизводительная реализация скалярного произведения с векторизацией (SIMD) и параллельной обработкой по блокам через `executor`.
-
+## Elementwise_reduce 
+Асинхронная поэлементная редукция над двумя массивами. Сначала к каждой паре элементов применяется бинарная операция (`elem_op(a[i], b[i])`), затем результаты сводятся редукцией (`reduce_op`) с начальным элементом `identity`. Есть удобные перегрузки для `pointer`/`std::span`/`std::vector`.
 ### Сигнатуры
 ```cpp
-// указатели + длина
-template <typename T, pot::simd::SIMDType ST>
-pot::coroutines::lazy_task<T>
-dot_simd(pot::executor& exec, const T* a, const T* b, std::size_t n)
-    requires(std::is_arithmetic_v<T>);
+// 1) Указатели
+template <typename T, typename R = T,
+          typename ElemOp = std::plus<T>,
+          typename ReduceOp = std::plus<R>>
+pot::coroutines::lazy_task<R>
+elementwise_reduce(pot::executor& exec,
+                   const T* a, const T* b, std::size_t n,
+                   ElemOp elem_op, ReduceOp reduce_op, R identity)
+  requires(std::is_arithmetic_v<T> && std::is_arithmetic_v<R>);
 
-// vectors
-template <typename T, pot::simd::SIMDType ST>
-pot::coroutines::lazy_task<T>
-dot_simd(pot::executor& exec, const std::vector<T>& a, const std::vector<T>& b)
-    requires(std::is_arithmetic_v<T>);
+// 2) std::span
+template <typename T, typename R = T,
+          typename ElemOp = std::plus<T>,
+          typename ReduceOp = std::plus<T>>
+pot::coroutines::lazy_task<R>
+elementwise_reduce(pot::executor& exec,
+                   std::span<const T> a, std::span<const T> b,
+                   ElemOp elem_op, ReduceOp reduce_op, R identity);
 
-// полу-указатели (a_begin/a_end + b_begin)
-template <typename T, pot::simd::SIMDType ST>
-pot::coroutines::lazy_task<T>
-dot_simd(pot::executor& exec, const T* a_begin, const T* a_end, const T* b_begin)
-    requires(std::is_arithmetic_v<T>);
+// 3) std::vector
+template <typename T, typename R, typename ElemOp, typename ReduceOp>
+pot::coroutines::lazy_task<R>
+elementwise_reduce(pot::executor& exec,
+                   const std::vector<T>& a, const std::vector<T>& b,
+                   ElemOp elem_op, ReduceOp reduce_op, R identity);
 ```
-### Параметры
 
-- `T` — арифметический тип элементов.
+### Параметры и требования
+
+- `T` — тип входных элементов (арифметический).
     
-- `ST` — стратегия SIMD из `pot::simd::SIMDType` (SSE/AVX/AVX512 ).
+- `R` — тип результата (арифметический, по умолчанию `T`).
     
-- `exec` — исполнитель (одно- или многопоточный).
+- `ElemOp` — вызываемый `(T, T) -> R`, применяется поэлементно.
     
-- `a`, `b`, `n` — массивы и их размер; для перегрузок со `span`/`vector` размеры должны совпадать (иначе будет `std::invalid_argument`).
+- `ReduceOp` — вызываемый `(R, R) -> R`, сводит результаты.
+    
+- `exec` — `pot::executor` для планирования задач (используется `parfor`).
+    
+- Для перегрузок `span`/`vector` размеры должны совпадать, иначе `std::invalid_argument`.
+    
 
 ### Возвращаемое значение
 
-`lazy_task<T>` — ленивая корутина, завершающаяся, когда всё посчитано. Результат — сумма типа `T`.
+`pot::coroutines::lazy_task<R>` — завершается значением редукции (при `n == 0` возвращается `identity`).
+
+### Пример использования
+
+**Скаларное произведение**
+```cpp
+auto dot = [&](pot::executor& exec,
+               const std::vector<double>& a,
+               const std::vector<double>& b)
+    -> pot::coroutines::lazy_task<double>
+{
+    co_return co_await pot::algorithms::elementwise_reduce<double,double>(
+        exec, a, b,
+        std::multiplies<double>{},
+        std::plus<double>{},
+        0.0
+    );
+};
+
+```
+
+## Elementwise_reduce_simd
+SIMD-вариант поэлементной редукции: обрабатывает несколько элементов за итерацию через `pot::simd::simd_forced<..., ST>`, затем доредуцирует хвост скалярно.
+### Сигнатуры
+```cpp
+// 1) Указатели (SIMD)
+template <typename T, typename R = T,
+          pot::simd::SIMDType ST,
+          typename SimdElemOp,   // (simd_forced<T, ST>, simd_forced<T, ST>) -> simd_forced<R, ST>
+          typename ScalarElemOp, // (T, T) -> R
+          typename ReduceOp>     // (R, R) -> R
+pot::coroutines::lazy_task<R>
+elementwise_reduce_simd(pot::executor& exec,
+                        const T* a, const T* b, std::size_t n,
+                        SimdElemOp simd_elem_op,
+                        ScalarElemOp scalar_elem_op,
+                        ReduceOp reduce_op,
+                        R identity)
+  requires(std::is_arithmetic_v<T> && std::is_arithmetic_v<R>);
+
+// 2) std::span (SIMD)
+template <typename T, typename R, pot::simd::SIMDType ST,
+          typename SimdElemOp, typename ScalarElemOp, typename ReduceOp>
+pot::coroutines::lazy_task<R>
+elementwise_reduce_simd(pot::executor& exec,
+                        std::span<const T> a, std::span<const T> b,
+                        SimdElemOp simd_elem_op,
+                        ScalarElemOp scalar_elem_op,
+                        ReduceOp reduce_op,
+                        R identity);
+
+// 3) std::vector (SIMD)
+template <typename T, typename R, pot::simd::SIMDType ST,
+          typename SimdElemOp, typename ScalarElemOp, typename ReduceOp>
+pot::coroutines::lazy_task<R>
+elementwise_reduce_simd(pot::executor& exec,
+                        const std::vector<T>& a, const std::vector<T>& b,
+                        SimdElemOp simd_elem_op,
+                        ScalarElemOp scalar_elem_op,
+                        ReduceOp reduce_op,
+                        R identity);
+```
+### Параметры и требования
+
+- `ST` — конкретный векторный тип `pot::simd::SIMDType` (например, SSE/AVX и т.п.).
+    
+- `simd_elem_op` — операция на SIMD-регистры (возвращает SIMD-аккумулятор).
+    
+- `scalar_elem_op` — операция для хвостовых скалярных элементов.
+    
+- Остальные требования аналогичны скалярной версии.
+    
+
+### Возвращаемое значение
+
+`pot::coroutines::lazy_task<R>` — результат редукции с использованием SIMD и параллельной обработки блоков.
+
+### Пример использования
+**L1-норма**
+```cpp
+template <typename T, pot::simd::SIMDType ST>
+pot::coroutines::lazy_task<T>
+l1_simd(pot::executor& exec, std::span<const T> a, std::span<const T> b)
+{
+    auto simd_abs_diff = [](auto va, auto vb){
+        auto vd = va - vb;     // simd_forced<T, ST>
+        return vd.abs();
+    };
+    auto scalar_abs_diff = [](T x, T y){ return std::abs(x - y); };
+
+    co_return co_await pot::algorithms::elementwise_reduce_simd<T, T, ST>(
+        exec, a, b, simd_abs_diff, scalar_abs_diff, std::plus<T>{}, T{0});
+}
+```
+
+## Dot / Dot_simd
+Асинхронное скалярное произведение двух массивов. Есть обычная и SIMD-версия; обе возвращают ленивую корутину с результатом.
+### Сигнатуры
+```cpp
+// SIMD: std::span
+template <typename T, pot::simd::SIMDType ST>
+pot::coroutines::lazy_task<T>
+dot_simd(pot::executor& exec, std::span<const T> a, std::span<const T> b)
+  requires(std::is_arithmetic_v<T>);
+
+// SIMD: std::vector
+template <typename T, pot::simd::SIMDType ST>
+pot::coroutines::lazy_task<T>
+dot_simd(pot::executor& exec, const std::vector<T>& a, const std::vector<T>& b)
+  requires(std::is_arithmetic_v<T>);
+
+// Без SIMD: std::span
+template <typename T>
+pot::coroutines::lazy_task<T>
+dot(pot::executor& exec, std::span<const T> a, std::span<const T> b)
+  requires(std::is_arithmetic_v<T>);
+
+// Без SIMD: std::vector
+template <typename T>
+pot::coroutines::lazy_task<T>
+dot(pot::executor& exec, const std::vector<T>& a, const std::vector<T>& b)
+  requires(std::is_arithmetic_v<T>);
+```
+### Параметры и требования
+
+- `T` — арифметический тип элементов.
+    
+- `ST` — целевой SIMD-тип (`pot::simd::SIMDType`) для `dot_simd`.
+    
+- `exec` — `pot::executor` для распараллеливания.
+    
+- `a`, `b` — входные последовательности одинаковой длины (иначе `std::invalid_argument`).
+    
+
+### Возвращаемое значение
+
+`pot::coroutines::lazy_task<T>` — завершается значением скалярного произведения.
+
+### Примеры использования
+
+1. Обычная версия (vector)
+```cpp
+std::vector<double> a = /* ... */, b = /* ... */;
+auto res = co_await pot::algorithms::dot(exec, a, b);
+```
+2. SIMD-версия (span)
+```cpp
+pot::coroutines::lazy_task<float> run_simd(pot::executor& exec,
+                                           std::span<const float> a,
+                                           std::span<const float> b) {
+    co_return co_await pot::algorithms::dot_simd<float, AVX>(exec, a, b);
+}
+```
+
+## Parsections
+Запускает несколько независимых секций параллельно на заданном исполнителе. Каждая секция — это вызываемый объект (`void()` или корутина, возвращающая `task<void>` / `lazy_task<void>`). Завершается, когда **все** секции отработают.
+
+### Сигнатуры
+
+```cpp
+template<typename... Funcs> requires (std::is_invocable_v<Funcs> && ...) 
+pot::coroutines::lazy_task<void> parsections(pot::executor& executor, Funcs&&... funcs);
+```
+
+### Параметры и требования
+
+- `executor` — экземпляр `pot::executor`, на котором будут запущены все секции.
+    
+- `funcs...` — один или несколько вызываемых объектов:
+    
+    - синхронные `void()` функции/лямбда-функции;
+        
+    - корутины, возвращающие `pot::coroutines::task<void>` или `pot::coroutines::lazy_task<void>`.
+        
+- Требования:
+    
+    - как минимум один аргумент (`static_assert(sizeof...(Funcs) > 0)`).
+        
+    - каждый `Func` должен быть вызываем без аргументов (`std::is_invocable_v`).
+        
+
+### Возвращаемое значение
+
+`pot::coroutines::lazy_task<void>` — завершается после завершения **всех** секций.
 
 ### Пример использования
 ```cpp
-#include "pot/algorithms/dot_simd.h"
-#include "pot/executors/thread_pool_executor_lfgq.h"
+pot::coroutines::task<void> coroA();
+pot::coroutines::lazy_task<void> coroB();
 
-pot::coroutines::task<void> example() {
-    std::vector<T> a = {/* ... */};
-    std::vector<T> b = {/* ... */};
+co_await pot::algorithms::parsections(exec,
+    []                                       { prepare();                   },
+    []() -> pot::coroutines::task<void>      { co_await coroA(); co_return; },
+    []() -> pot::coroutines::lazy_task<void> { co_await coroB(); co_return; }
+);
+```
+## Resume_on
+Функция, возвращающая awaitable, которая возобновляет выполнение текущей корутины на заданном `executor`.
 
-    pot::executors::thread_pool_executor_lfgq pool("dot-pool", 8);
+### Сигнатуры
 
-    // как lazy_task<T>: можно co_await прямо здесь или позже
-    T res = 
-	    co_await pot::algorithms::dot_simd<float, pot::simd::SIMDType::AVX>(pool, a, b);
+```cpp
+namespace pot::coroutines {  
+	// Возвращает awaitable-объект; при await — планирует продолжение на executor 
+	auto resume_on(pot::executor& executor) noexcept;  
+}
+```
 
-    std::cout << "dot(a,b) = " << res << "\n";
+### Поведение
+
+- `co_await resume_on(exec)` всегда откладывает продолжение и передаёт `std::coroutine_handle<>` в `executor.run_detached(...)`.
+    
+- `await_ready()` всегда `false` — продолжение **всегда** переназначается на переданный `executor`.
+    
+- Без возвращаемого значения; ошибки (если есть) определяются реализацией `executor`.
+    
+
+### Параметры и требования
+
+- `executor` — экземпляр `pot::executor`, способный принять `std::coroutine_handle<>` через `run_detached(handle)` и возобновить его на собственном планировщике.  
+
+### Примеры использования
+```cpp
+using pot::coroutines::resume_on;
+
+pot::coroutines::task<void> do_work(pot::executor& cpu1, pot::executor& cpu2) 
+{
+    co_await resume_on(cpu1);    // продолжить на CPU1
+    co_await heavy_compute();    // тяжёлая работа на CPU1
+    co_await resume_on(cpu2);    // продолжить на CPU2
+    update();                    // update() на CPU2
     co_return;
 }
 ```
+
