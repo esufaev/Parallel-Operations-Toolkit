@@ -7,6 +7,13 @@
 
 namespace pot::simd
 {
+    /**
+     * @brief Generic SIMD-like wrapper using plain scalar array.
+     * 
+     * Template params:
+     * \tparam scalar_type  underlying scalar type (must satisfy simdable).
+     * \tparam scalar_count number of elements in the vector.
+     */
     template <simdable scalar_type, size_t scalar_count>
     class simd_auto
     {

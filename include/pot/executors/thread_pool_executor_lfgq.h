@@ -9,6 +9,21 @@
 
 namespace pot::executors
 {
+    /**
+     * @brief Thread pool executor using a global lock-free queue.
+     *
+     * Schedules tasks into a bounded lock-free queue (`lfqueue`) and executes them
+     * on a fixed number of worker threads. Tasks are submitted via `run`, `lazy_run`
+     * or `run_detached` from the base `executor` interface.
+     *
+     * @param name Human-readable executor name (in ctor).
+     * @param thread_count Number of worker threads to start. Defaults to `std::thread::hardware_concurrency()`.
+     * @param queue_size Size of the lock-free queue. Must be a power of two. Default = 1024.
+     *
+     * @return derived_execute(func) schedules a function into the queue\n  
+     * @return shutdown() signals stop, drains queue, and joins all workers\n  
+     * @return thread_count() returns number of worker threads.  
+     */
     class thread_pool_executor_lfgq : public executor
     {
     private:

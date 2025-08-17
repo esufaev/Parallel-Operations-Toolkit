@@ -9,6 +9,30 @@
 
 namespace pot::algorithms
 {
+    /**
+     * @brief Asynchronously executes a parallel for-loop using the given executor.
+     *
+     * The iteration space [from, to) is divided into chunks, which are then
+     * scheduled across the executor's threads. Each iteration calls the provided
+     * function object @p func, which may return either:
+     *   - `void` (synchronous execution), or
+     *   - a coroutine (`task<void>` or `lazy_task<void>`) to be awaited.
+     *
+     * @tparam static_chunk_size Optional fixed chunk size. If -1 (default), the chunk size
+     *         is computed dynamically as max(1, numIterations / thread_count).
+     * @tparam IndexType Integral type used for iteration indices.
+     * @tparam FuncType  Callable type accepting (IndexType). Can return void or a coroutine.
+     *
+     * @param executor The executor used to schedule work across threads.
+     * @param from     Start index (inclusive).
+     * @param to       End index (exclusive). Must be greater than @p from.
+     * @param func     Function or functor applied to each index.
+     *
+     * @return lazy_task<void> A coroutine handle that completes once all chunks have finished.
+     *
+     * @throws assertion failure if @p from >= @p to.
+     *
+     */
     template <int64_t static_chunk_size = -1, typename IndexType, typename FuncType = void(IndexType)>
         requires std::invocable<FuncType &, IndexType>
     pot::coroutines::lazy_task<void>

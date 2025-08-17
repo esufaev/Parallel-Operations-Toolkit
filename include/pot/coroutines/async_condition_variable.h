@@ -7,6 +7,21 @@ namespace pot::coroutines
 {
     using coro_t = std::coroutine_handle<>;
 
+    /**
+     * @brief An asynchronous condition variable for coroutines.
+     *
+     * @param set Optional initial state (default = false). If true, the condition starts signaled.
+     *
+     * @return
+     * - `co_await` returns void; it simply suspends until the condition is signaled.
+     *
+     * @note
+     * - `set()` signals the condition and resumes all suspended coroutines.
+     * - `stop()` clears the state and drops awaiters without resuming them.
+     * - `reset()` sets the internal flag back to false, so future awaiters will suspend again.
+     * - `is_set()` allows querying the current state.
+     *
+     */
     class async_condition_variable
     {
         struct awaiter;

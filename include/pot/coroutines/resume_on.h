@@ -23,6 +23,13 @@ namespace pot::details
 
 namespace pot::coroutines
 {
+    /**
+     * @brief Returns an awaitable that resumes the awaiting coroutine on the given executor.
+     *
+     * @param executor Executor where the coroutine should continue execution.
+     * @return An awaitable that, when awaited, schedules resumption on @p executor.
+     *
+     */
     auto resume_on(pot::executor &executor) noexcept
     {
         return details::resume_on_awaitable(executor);

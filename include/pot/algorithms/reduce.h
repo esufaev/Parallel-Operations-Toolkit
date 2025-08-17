@@ -13,6 +13,27 @@
 
 namespace pot::algorithms
 {
+    /**
+     * @brief Asynchronously computes an element-wise reduction of two arrays.
+     *
+     * Applies @p elem_op to each pair of elements (a[i], b[i]) and then reduces
+     * the results with @p reduce_op, starting from @p identity.
+     *
+     * @tparam T         Input element type (must be arithmetic).
+     * @tparam R         Result type (must be arithmetic, defaults to T).
+     * @tparam ElemOp    Callable type: (T, T) -> R.
+     * @tparam ReduceOp  Callable type: (R, R) -> R.
+     *
+     * @param exec     Executor for task scheduling.
+     * @param a        Pointer to first array.
+     * @param b        Pointer to second array.
+     * @param n        Number of elements.
+     * @param elem_op  Binary operation applied element-wise.
+     * @param reduce_op Reduction operation to combine results.
+     * @param identity Identity element for the reduction.
+     *
+     * @return lazy_task<R> The reduced result.
+     */
     template <typename T, typename R = T, typename ElemOp = std::plus<T>, typename ReduceOp = std::plus<R>>
     [[nodiscard]] pot::coroutines::lazy_task<R>
     elementwise_reduce(pot::executor &exec, const T *a, const T *b, std::size_t n, ElemOp elem_op, ReduceOp reduce_op, R identity)
@@ -45,6 +66,11 @@ namespace pot::algorithms
         co_return total;
     }
 
+    /**
+     * @brief Convenience overload of elementwise_reduce for std::span.
+     * @copydetails elementwise_reduce(pot::executor&, const T*, const T*, std::size_t, ElemOp, ReduceOp, R)
+     * @throws std::invalid_argument if the spans differ in size.
+     */
     template <typename T, typename R = T, typename ElemOp = std::plus<T>, typename ReduceOp = std::plus<T>>
     [[nodiscard]] pot::coroutines::lazy_task<R>
     elementwise_reduce(pot::executor &exec, std::span<const T> a, std::span<const T> b, ElemOp elem_op, ReduceOp reduce_op, R identity)
@@ -54,6 +80,11 @@ namespace pot::algorithms
         return elementwise_reduce<T, R>(exec, a.data(), b.data(), a.size(), elem_op, reduce_op, identity);
     }
 
+    /**
+     * @brief Convenience overload of elementwise_reduce for std::vector.
+     * @copydetails elementwise_reduce(pot::executor&, const T*, const T*, std::size_t, ElemOp, ReduceOp, R)
+     * @throws std::invalid_argument if the vectors differ in size.
+     */
     template <typename T, typename R, typename ElemOp, typename ReduceOp>
     [[nodiscard]] pot::coroutines::lazy_task<R>
     elementwise_reduce(pot::executor &exec, const std::vector<T> &a, const std::vector<T> &b, ElemOp elem_op, ReduceOp reduce_op, R identity)
@@ -63,6 +94,30 @@ namespace pot::algorithms
         return elementwise_reduce<T, R>(exec, std::span<const T>(a), std::span<const T>(b), elem_op, reduce_op, identity);
     }
 
+    /**
+     * @brief Asynchronously computes an element-wise reduction using SIMD acceleration.
+     *
+     * Loads and processes multiple elements per iteration using SIMD instructions.
+     * Falls back to scalar processing for remaining elements.
+     *
+     * @tparam T             Input element type (must be arithmetic).
+     * @tparam R             Result type (must be arithmetic).
+     * @tparam ST            SIMD type (pot::simd::SIMDType).
+     * @tparam SimdElemOp    Callable: (simd_forced<T>, simd_forced<T>) -> simd_forced<R>.
+     * @tparam ScalarElemOp  Callable: (T, T) -> R.
+     * @tparam ReduceOp      Callable: (R, R) -> R.
+     *
+     * @param exec          Executor for task scheduling.
+     * @param a             Pointer to first array.
+     * @param b             Pointer to second array.
+     * @param n             Number of elements.
+     * @param simd_elem_op  Operation applied to SIMD registers.
+     * @param scalar_elem_op Operation applied to leftover scalar elements.
+     * @param reduce_op     Reduction operator.
+     * @param identity      Identity element for reduction.
+     *
+     * @return lazy_task<R> The reduced result.
+     */
     template < typename T, typename R = T,
         pot::simd::SIMDType ST, 
         typename SimdElemOp, typename ScalarElemOp, typename ReduceOp>
@@ -117,6 +172,11 @@ namespace pot::algorithms
         co_return total;
     }
 
+    /**
+     * @brief Convenience overload of elementwise_reduce_simd for std::span.
+     * @copydetails elementwise_reduce_simd(pot::executor&, const T*, const T*, std::size_t, SimdElemOp, ScalarElemOp, ReduceOp, R)
+     * @throws std::invalid_argument if the spans differ in size.
+     */
     template <typename T, typename R, pot::simd::SIMDType ST, typename SimdElemOp, typename ScalarElemOp, typename ReduceOp>
     [[nodiscard]] pot::coroutines::lazy_task<R>
     elementwise_reduce_simd(pot::executor &exec, std::span<const T> a, std::span<const T> b,
@@ -128,6 +188,11 @@ namespace pot::algorithms
                                                  simd_elem_op, scalar_elem_op, reduce_op, identity);
     }
 
+    /**
+     * @brief Convenience overload of elementwise_reduce_simd for std::vector.
+     * @copydetails elementwise_reduce_simd(pot::executor&, const T*, const T*, std::size_t, SimdElemOp, ScalarElemOp, ReduceOp, R)
+     * @throws std::invalid_argument if the vectors differ in size.
+     */
     template <typename T, typename R, pot::simd::SIMDType ST, typename SimdElemOp, typename ScalarElemOp, typename ReduceOp>
     [[nodiscard]] pot::coroutines::lazy_task<R>
     elementwise_reduce_simd(pot::executor &exec, const std::vector<T> &a, const std::vector<T> &b,

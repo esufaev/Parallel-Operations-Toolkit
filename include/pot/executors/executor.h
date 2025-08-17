@@ -9,6 +9,20 @@
 
 namespace pot
 {
+    /**
+     * @brief Base interface for executors that schedule and run functions/coroutines.
+     *
+     * Provides synchronous fire-and-forget dispatch (`run_detached`) and coroutine-friendly
+     * helpers (`run`, `lazy_run`) that adapt both regular callables and coroutine-returning
+     * callables (`task<T>`, `lazy_task<T>`). Derived executors implement the actual
+     * scheduling in `derived_execute`.
+     *
+     * @param name Ctor parameter: human-readable executor name.
+     *
+     * @tparam Func For `run`/`lazy_run`: any callable invocable with `Args...`.
+     * @tparam Args For `run`/`lazy_run`: argument pack forwarded to `Func`.
+     * 
+     */
     class executor
     {
     protected:

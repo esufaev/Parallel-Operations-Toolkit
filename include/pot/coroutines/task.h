@@ -93,6 +93,17 @@ namespace pot::coroutines
     template <typename T>
     struct lazy_promise_type_impl;
 
+    /**
+     * @brief A coroutine return type that defers execution until awaited.
+     *
+     * @tparam T The result type (may be `void`).
+     *
+     * @return
+     * - `co_await lazy_task<T>`: Suspends caller until the coroutine completes.  
+     *   Returns the stored value (or nothing for `void`).
+     * - `get()`: Runs to completion synchronously and returns the result.  
+     * - `sync_wait()`: Busy-waits until ready and then returns the result.
+     */
     template <typename T>
     class lazy_task
     {
@@ -179,6 +190,23 @@ namespace pot::coroutines
         handle_type m_handle{};
     };
 
+    /**
+     * @brief A coroutine return type that starts execution immediately.
+     *
+     * `task<T>` behaves like a coroutine future:
+     * - Execution begins right away (`initial_suspend = suspend_never`).
+     * - Awaiting it will suspend until completion.
+     *
+     * @tparam T The result type (may be `void`).
+     *
+     * @param m_handle Internal coroutine handle managed by the task.
+     *
+     * @return
+     * - `co_await task<T>`: Suspends caller until coroutine completes, then returns the result.
+     * - `get()`: Executes until completion if not ready, then returns result synchronously.
+     * - `sync_wait()`: Busy-waits until ready and returns result.
+     *
+     */
     template <typename T>
     class task
     {
