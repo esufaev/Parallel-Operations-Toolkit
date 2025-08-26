@@ -14,7 +14,6 @@
 #include "pot/executors/thread_executor.h"
 #include "pot/executors/thread_pool_executor.h"
 #include "pot/executors/thread_pool_executor_lfgq.h"
-#include "pot/executors/thread_pool_executor_lflq.h"
 
 #include "pot/simd/simd_auto.h"
 #include "pot/simd/simd_forced.h"
