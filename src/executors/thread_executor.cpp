@@ -13,7 +13,7 @@ pot::executors::thread_executor::~thread_executor()
     shutdown();
 }
 
-void pot::executors::thread_executor::derived_execute(std::function<void()> func)
+void pot::executors::thread_executor::derived_execute(pot::utils::unique_function_once&& func)
 {
     {
         std::unique_lock<std::mutex> lock(m_queue_mtx);

@@ -1,115 +1,158 @@
 #pragma once
 
-#include <type_traits>
-#include <utility>
+#include <vector>
+#include <thread>
 #include <atomic>
-#include <memory>
+#include <condition_variable>
+#include <mutex>
+#include <chrono>
+#include <stdexcept>
 
-#include "pot/threads/global_thread.h"
-#include "pot/threads/local_thread.h"
 #include "pot/executors/executor.h"
+#include "pot/algorithms/lfqueue.h"
+#include "pot/utils/unique_function.h"
 
+#include <iostream>
 namespace pot::executors
 {
-    template <bool global_queue_mode>
-    class thread_pool_executor final : public executor
+
+    class thread_pool_executor_lflqt final : public executor
     {
     public:
-        struct empty_type {};
-
-        template <typename TrueType, typename FalseType>
-        using mode_type = std::conditional_t<global_queue_mode, TrueType, FalseType>;
-
-        using thread_type = mode_type<pot::global_thread, pot::local_thread>;
-
-        explicit thread_pool_executor(std::string name, size_t num_threads = std::thread::hardware_concurrency())
-            : executor(std::move(name)), m_shutdown(false)
+        explicit thread_pool_executor_lflqt(
+            std::string name,
+            std::size_t thread_count = std::thread::hardware_concurrency(),
+            std::size_t queue_capacity = 1024)
+            : executor(std::move(name)), m_thread_count(thread_count ? thread_count : 1), m_queue_capacity(queue_capacity ? queue_capacity : 1<<12)
         {
-            m_threads.reserve(num_threads);
-            if constexpr (global_queue_mode)
-            {
-                for (size_t i = 0; i < num_threads; ++i)
-                {
-                    m_threads.push_back(std::make_unique<thread_type>(
-                        m_tasks_mutex, m_condition, m_tasks, i, "Thread " + std::to_string(i)));
-                }
-            }
-            else
-            {
-                m_current_thread = 0;
-                for (size_t i = 0; i < num_threads; ++i)
-                {
-                    m_threads.push_back(std::make_unique<thread_type>(i, "Thread " + std::to_string(i)));
-                }
-                for (auto &thread : m_threads)
-                {
-                    dynamic_cast<local_thread *>(thread.get())->set_other_workers(&m_threads);
-                }
-            }
+            m_queues.reserve(m_thread_count);
+            for (std::size_t i = 0; i < m_thread_count; ++i)
+                m_queues.emplace_back(std::make_unique<pot::algorithms::lfqueue<pot::utils::unique_function_once>>(m_queue_capacity));
+
+            m_workers.reserve(m_thread_count);
+            for (std::size_t i = 0; i < m_thread_count; ++i)
+                m_workers.emplace_back(&thread_pool_executor_lflqt::worker_loop, this, i);
         }
 
-        ~thread_pool_executor() override { shutdown(); }
+        ~thread_pool_executor_lflqt() override
+        {
+            shutdown();
+        }
+
+        std::size_t thread_count() const override { return m_thread_count; }
+
+        void stop() noexcept
+        {
+            bool expected = false;
+            if (!m_stopping.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+                return;
+            m_cv.notify_all();
+        }
+
+        void join()
+        {
+            for (auto &t : m_workers)
+                if (t.joinable())
+                    t.join();
+        }
 
         void shutdown() override
         {
-            m_shutdown = true;
-
-            for (auto &thread : m_threads)
-            {
-                thread->request_stop();
-            }
-
-            if constexpr (global_queue_mode)
-            {
-                m_condition.notify_all();
-            }
-            else
-            {
-                for (auto &thread : m_threads)
-                {
-                    thread->notify();
-                }
-            }
-
-            for (auto &thread : m_threads)
-            {
-                if (thread->joinable())
-                {
-                    thread->join();
-                }
-            }
+            stop();
+            join();
         }
 
-        [[nodiscard]] size_t thread_count() const override { return m_threads.size(); }
-
     protected:
-        void derived_execute(std::function<void()> func) override
+        void derived_execute(pot::utils::unique_function_once &&f) override
         {
-            if constexpr (global_queue_mode)
+            if (m_stopping.load(std::memory_order_acquire))
+                throw std::runtime_error("shutting down");
+
+            std::size_t idx = m_round_robin.fetch_add(1, std::memory_order_relaxed) % m_thread_count;
+            m_pending.fetch_add(1, std::memory_order_release);
+
+            if (!m_queues[idx]->push_back(std::move(f)))
             {
-                {
-                    std::lock_guard lock(m_tasks_mutex);
-                    m_tasks.emplace(std::move(func));
-                }
-                m_condition.notify_one();
+                m_pending.fetch_sub(1, std::memory_order_release);
+                throw std::runtime_error("cant push_back lfqueue");
             }
-            else
-            {
-                m_threads[m_current_thread++ % m_threads.size()]->run_detached(std::move(func));
-            }
+            m_cv.notify_one();
         }
 
     private:
-        std::atomic_bool m_shutdown;
-        std::vector<std::unique_ptr<thread_type>> m_threads;
+        static constexpr std::size_t npos = static_cast<std::size_t>(-1); // temp
+        static inline thread_local std::size_t t_worker_index = npos;
 
-        mode_type<std::mutex, empty_type> m_tasks_mutex;
-        mode_type<std::condition_variable, empty_type> m_condition;
-        mode_type<std::queue<std::function<void()>>, empty_type> m_tasks;
+        std::size_t current_worker_index() const noexcept { return t_worker_index; }
 
-        mode_type<empty_type, std::atomic_uint64_t> m_current_thread;
+        void worker_loop(std::size_t my_index)
+        {
+            t_worker_index = my_index;
+
+            auto try_pop_execute = [&](std::size_t from_index) -> bool
+            {
+                pot::utils::unique_function_once task;
+                if (m_queues[from_index]->pop(task))
+                {
+                    try 
+                    {
+                        task();
+                    } 
+                    catch (...) 
+                    {
+                        m_pending.fetch_sub(1, std::memory_order_acq_rel);
+                        throw;
+                    }
+                    m_pending.fetch_sub(1, std::memory_order_acq_rel);
+                    return true;
+                }
+                return false;
+            };
+
+            while (true)
+            {
+                if (try_pop_execute(my_index))
+                    continue;
+
+                bool stolen = false;
+                for (std::size_t k = 0; k < m_thread_count; ++k)
+                {
+                    std::size_t victim = (my_index + k) % m_thread_count;
+                    if (try_pop_execute(victim))
+                    {
+                        stolen = true;
+                        break;
+                    }
+                }
+
+                if (stolen)
+                    continue;
+
+                if (m_stopping.load(std::memory_order_acquire) && m_pending.load(std::memory_order_acquire) == 0)
+                {
+                    break;
+                }
+
+                std::unique_lock<std::mutex> lk(m_cv_mtx);
+                m_cv.wait(lk, [&]
+                          { return m_stopping.load(std::memory_order_acquire) || m_pending.load(std::memory_order_acquire) > 0; });
+            }
+
+            t_worker_index = npos;
+        }
+
+    private:
+        const std::size_t m_thread_count;
+        const std::size_t m_queue_capacity;
+
+        std::vector<std::unique_ptr<pot::algorithms::lfqueue<pot::utils::unique_function_once>>> m_queues;
+        std::vector<std::thread> m_workers;
+
+        std::atomic<bool> m_stopping{false};
+        std::atomic<size_t> m_pending{0};
+        std::atomic<size_t> m_round_robin{0};
+
+        std::mutex m_cv_mtx;
+        std::condition_variable m_cv;
     };
-
-    using thread_pool_executor_ogq = thread_pool_executor<true>;
-    using thread_pool_executor_olq = thread_pool_executor<false>;
-}
+} // namespace pot

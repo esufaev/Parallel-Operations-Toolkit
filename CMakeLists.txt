@@ -36,7 +36,7 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/utils/time_it.h
     include/${PROJECT_NAME}/utils/platform.h
-    # include/${PROJECT_NAME}/utils/this_thread.h
+    include/${PROJECT_NAME}/utils/this_thread.h
     include/${PROJECT_NAME}/utils/cache_line.h
     include/${PROJECT_NAME}/utils/unique_function.h    
 
@@ -44,8 +44,6 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
     include/${PROJECT_NAME}/executors/thread_pool_executor.h
-    include/${PROJECT_NAME}/executors/thread_pool_executor_lfgq.h
-    include/${PROJECT_NAME}/executors/test_executor.h
 
     include/${PROJECT_NAME}/coroutines/task.h
     include/${PROJECT_NAME}/coroutines/async_condition_variable.h
@@ -63,10 +61,8 @@ set(POT_HEADERS
 )
 
 set(POT_SOURCES
-    # src/utils/this_thread.cpp
+    src/utils/this_thread.cpp
     
-    # src/threads/thread.cpp
-
     # src/executors/inline_executor.cpp
     # src/executors/thread_executor.cpp
 )

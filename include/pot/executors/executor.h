@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "pot/coroutines/task.h"
-#include "pot/coroutines/async_condition_variable.h"
+#include "pot/utils/unique_function.h"
 
 namespace pot
 {
@@ -21,14 +21,14 @@ namespace pot
      *
      * @tparam Func For `run`/`lazy_run`: any callable invocable with `Args...`.
      * @tparam Args For `run`/`lazy_run`: argument pack forwarded to `Func`.
-     * 
+     *
      */
     class executor
     {
     protected:
         std::string m_name;
 
-        virtual void derived_execute(std::function<void()> func) = 0;
+        virtual void derived_execute(pot::utils::unique_function_once &&func) = 0;
 
     public:
         explicit executor(std::string name) : m_name(std::move(name)) {}
@@ -51,15 +51,15 @@ namespace pot
         }
 
         template <typename Func, typename... Args>
-        auto run(Func&& func, Args&&... args)
-            -> coroutines::task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>
+        auto run(Func &&func, Args &&...args)
+            -> pot::coroutines::task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>
         {
             return do_run<false>(std::forward<Func>(func), std::forward<Args>(args)...);
         }
 
         template <typename Func, typename... Args>
-        auto lazy_run(Func&& func, Args&&... args)
-            -> coroutines::lazy_task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>
+        auto lazy_run(Func &&func, Args &&...args)
+            -> pot::coroutines::lazy_task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>
         {
             return do_run<true>(std::forward<Func>(func), std::forward<Args>(args)...);
         }
@@ -82,11 +82,11 @@ namespace pot
 
     private:
         template <bool Lazy, typename Func, typename... Args>
-        auto do_run(Func&& func, Args&&... args)
+        auto do_run(Func &&func, Args &&...args)
             -> std::conditional_t<
                 Lazy,
-                coroutines::lazy_task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>,
-                coroutines::task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>>
+                pot::coroutines::lazy_task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>,
+                pot::coroutines::task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>>
         {
             using Ret = std::invoke_result_t<Func, Args...>;
             using Val = pot::traits::awaitable_value_t<Ret>;

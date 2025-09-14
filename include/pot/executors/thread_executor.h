@@ -23,7 +23,7 @@ public:
     void shutdown() override;
 
 protected:
-    void derived_execute(std::function<void()> func) override;
+    void derived_execute(pot::utils::unique_function_once&& func) override;
 
 private:
     void thread_loop();

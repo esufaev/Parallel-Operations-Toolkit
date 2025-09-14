@@ -23,9 +23,12 @@ namespace pot::coroutines::detail
         {
             bool await_ready() const noexcept { return false; }
             template <typename PROMISE>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<PROMISE> h) const noexcept
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<PROMISE> handle) const noexcept
             {
-                return h.promise().m_continuation ? h.promise().m_continuation : std::noop_coroutine();
+                handle.promise().m_ready.store(true, std::memory_order_release);
+                if (handle.promise().m_continuation)
+                    return handle.promise().m_continuation;
+                return std::noop_coroutine();
             }
             void await_resume() const noexcept {}
         };
@@ -40,23 +43,17 @@ namespace pot::coroutines::detail
         void set_value(U &&value)
         {
             m_data.template emplace<T>(std::forward<U>(value));
-            if (m_ready.exchange(true, std::memory_order_release))
-                throw std::runtime_error("Value already set in promise_type.");
         }
 
         void set_value()
             requires(std::is_void_v<T>)
         {
             m_data.template emplace<std::monostate>();
-            if (m_ready.exchange(true, std::memory_order_release))
-                throw std::runtime_error("Void value already set in promise_type.");
         }
 
         void set_exception(std::exception_ptr exception)
         {
             m_data.template emplace<std::exception_ptr>(exception);
-            if (m_ready.exchange(true, std::memory_order_release))
-                throw std::runtime_error("Exception already set in promise_type.");
         }
 
         bool is_ready() const noexcept { return m_ready.load(std::memory_order_acquire); }
@@ -99,9 +96,9 @@ namespace pot::coroutines
      * @tparam T The result type (may be `void`).
      *
      * @return
-     * - `co_await lazy_task<T>`: Suspends caller until the coroutine completes.  
+     * - `co_await lazy_task<T>`: Suspends caller until the coroutine completes.
      *   Returns the stored value (or nothing for `void`).
-     * - `get()`: Runs to completion synchronously and returns the result.  
+     * - `get()`: Runs to completion synchronously and returns the result.
      * - `sync_wait()`: Busy-waits until ready and then returns the result.
      */
     template <typename T>
@@ -113,7 +110,7 @@ namespace pot::coroutines
         using value_type = T;
 
         lazy_task() = default;
-        explicit lazy_task(handle_type h) noexcept : m_handle(h) {}
+        explicit lazy_task(handle_type handle) noexcept : m_handle(handle) {}
 
         lazy_task(lazy_task const &) = delete;
         lazy_task &operator=(lazy_task const &) = delete;
@@ -131,53 +128,68 @@ namespace pot::coroutines
             return *this;
         }
 
-        explicit operator bool() const noexcept { return m_handle && m_handle.done(); }
+        explicit operator bool() const noexcept { return m_handle != nullptr; }
 
-        bool await_ready() const noexcept
+        auto operator co_await() && noexcept
         {
-            return !m_handle || m_handle.promise().is_ready();
-        }
-
-        template <typename PROMISE>
-        void await_suspend(std::coroutine_handle<PROMISE> awaiting)
-        {
-            m_handle.promise().m_continuation = awaiting;
-            if (!m_handle.done())
-                m_handle.resume();
-        }
-
-        auto await_resume()
-        {
-            if constexpr (std::is_void_v<T>)
+            struct awaiter
             {
-                m_handle.promise().get();
-                return;
-            }
-            else
-            {
-                return m_handle.promise().get();
-            }
+                handle_type handle;
+
+                bool await_ready() const noexcept
+                {
+                    return !handle || handle.promise().is_ready();
+                }
+
+                void await_suspend(std::coroutine_handle<> awaiting) noexcept
+                {
+                    handle.promise().m_continuation = awaiting;
+
+                    if (!handle || handle.promise().is_ready())
+                        awaiting.resume();
+
+                    if (handle && !handle.done())
+                        handle.resume();
+                }
+
+                auto await_resume()
+                {
+                    if constexpr (std::is_void_v<T>)
+                    {
+                        handle.promise().get();
+                        handle.destroy();
+                        return;
+                    }
+                    else
+                    {
+                        auto result = handle.promise().get();
+                        handle.destroy();
+                        return result;
+                    }
+                }
+            };
+
+            return awaiter{std::exchange(m_handle, {})};
         }
 
         auto get()
         {
-            if (m_handle && !m_handle.promise().is_ready())
-                m_handle.resume();
+            auto handle = std::exchange(m_handle, {});
+            if (handle && !handle.promise().is_ready())
+                handle.resume();
 
             if constexpr (std::is_void_v<T>)
-                m_handle.promise().get();
+            {
+                handle.promise().get();
+                handle.destroy();
+                return;
+            }
             else
-                return m_handle.promise().get();
-        }
-
-        auto sync_wait()
-        {
-            m_handle.promise().wait();
-
-            if constexpr (std::is_void_v<T>)
-                m_handle.promise().get();
-            else
-                return m_handle.promise().get();
+            {
+                auto result = handle.promise().get();
+                handle.destroy();
+                return result;
+            }
         }
 
         ~lazy_task()
@@ -233,51 +245,65 @@ namespace pot::coroutines
             return *this;
         }
 
-        explicit operator bool() const noexcept { return m_handle && m_handle.done(); }
+        explicit operator bool() const noexcept { return m_handle != nullptr; }
 
-        bool await_ready() const noexcept { return !m_handle || m_handle.promise().is_ready(); }
-
-        template <typename PROMISE>
-        void await_suspend(std::coroutine_handle<PROMISE> awaiting)
+        auto operator co_await() && noexcept
         {
-            m_handle.promise().m_continuation = awaiting;
-            if (!m_handle.done())
-                m_handle.resume();
-        }
+            struct awaiter
+            {
+                handle_type handle;
 
-        auto await_resume()
-        {
-            if constexpr (std::is_void_v<T>)
-            {
-                m_handle.promise().get();
-                return;
-            }
-            else
-            {
-                return m_handle.promise().get();
-            }
+                bool await_ready() const noexcept
+                {
+                    return !handle || handle.promise().is_ready();
+                }
+
+                void await_suspend(std::coroutine_handle<> awaiting) noexcept
+                {
+                    awaiting.resume();
+                }
+
+                auto await_resume()
+                {
+                    if constexpr (std::is_void_v<T>)
+                    {
+                        handle.promise().get();
+                        handle.destroy();
+                        return;
+                    }
+                    else
+                    {
+                        auto res = handle.promise().get();
+                        handle.destroy();
+                        return res;
+                    }
+                }
+            };
+
+            return awaiter{std::exchange(m_handle, {})};
         }
 
         auto get()
         {
-            if (m_handle && !m_handle.promise().is_ready())
-                m_handle.resume();
+            auto handle = std::exchange(m_handle, {});
+            if (!handle)
+                throw std::runtime_error("get() on empty lazy_task");
 
             if constexpr (std::is_void_v<T>)
-                m_handle.promise().get();
+            {
+                handle.promise().get();
+                handle.destroy();
+                return;
+            }
             else
-                return m_handle.promise().get();
+            {
+                auto result = handle.promise().get();
+                handle.destroy();
+                return result;
+            }
         }
 
-        auto sync_wait()
-        {
-            m_handle.promise().wait();
-
-            if constexpr (std::is_void_v<T>)
-                m_handle.promise().get();
-            else
-                return m_handle.promise().get();
-        }
+        void sync_wait() {}
 
         ~task()
         {
