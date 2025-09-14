@@ -303,8 +303,6 @@ namespace pot::coroutines
             }
         }
 
-        void sync_wait() {}
-
         ~task()
         {
             if (m_handle)

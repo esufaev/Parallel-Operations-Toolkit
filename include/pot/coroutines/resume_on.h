@@ -30,7 +30,7 @@ namespace pot::coroutines
      * @return An awaitable that, when awaited, schedules resumption on @p executor.
      *
      */
-    auto resume_on(pot::executor &executor) noexcept
+    inline auto resume_on(pot::executor &executor) noexcept
     {
         return details::resume_on_awaitable(executor);
     }

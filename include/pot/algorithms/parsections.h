@@ -50,8 +50,7 @@ namespace pot::algorithms
             })
         ), ...);
 
-        for (auto it = tasks.begin(); it != tasks.end(); ++it)
-            std::move(*it).sync_wait();
+        co_await pot::coroutines::when_all(tasks);
 
         co_return;
     }

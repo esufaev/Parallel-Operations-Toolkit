@@ -12,10 +12,8 @@
 #include "pot/algorithms/lfqueue.h"
 #include "pot/utils/unique_function.h"
 
-#include <iostream>
 namespace pot::executors
 {
-
     class thread_pool_executor_lflqt final : public executor
     {
     public:
@@ -52,8 +50,10 @@ namespace pot::executors
         void join()
         {
             for (auto &t : m_workers)
+            {
                 if (t.joinable())
                     t.join();
+            }
         }
 
         void shutdown() override
@@ -69,13 +69,11 @@ namespace pot::executors
                 throw std::runtime_error("shutting down");
 
             std::size_t idx = m_round_robin.fetch_add(1, std::memory_order_relaxed) % m_thread_count;
-            m_pending.fetch_add(1, std::memory_order_release);
-
+            
             if (!m_queues[idx]->push_back(std::move(f)))
-            {
-                m_pending.fetch_sub(1, std::memory_order_release);
                 throw std::runtime_error("cant push_back lfqueue");
-            }
+            
+            m_pending.fetch_add(1, std::memory_order_release);
             m_cv.notify_one();
         }
 
