@@ -2,9 +2,27 @@
 
 Этот модуль предоставляет удобные обёртки над C++20 корутинами:
 
-## Установка
+## 🚀 Установка
 
-Скоро
+Добавьте библиотеку в ваш проект с помощью **CMake** и `FetchContent`:
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(MY_PROJECT LANGUAGES CXX)
+
+include(FetchContent)
+
+FetchContent_Declare(
+  pot
+  GIT_REPOSITORY https://github.com/esufaev/Parallel-Operations-Toolkit.git
+  GIT_TAG master
+)
+
+FetchContent_MakeAvailable(pot)
+
+add_executable(MY_PROJECT main.cpp)
+target_link_libraries(MY_PROJECT PRIVATE pot::pot)
+```
 
 ## Task
 
