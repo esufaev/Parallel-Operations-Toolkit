@@ -28,7 +28,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/simd/simd_forced.h
 
     include/${PROJECT_NAME}/sync/sync_object.h
-    # include/${PROJECT_NAME}/sync/async_lock.h
+    include/${PROJECT_NAME}/sync/async_lock.h
 
     include/${PROJECT_NAME}/traits/pot_traits.h
     include/${PROJECT_NAME}/traits/compare.h

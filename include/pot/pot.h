@@ -23,7 +23,7 @@
 #include "pot/utils/time_it.h"
 #include "pot/utils/unique_function.h"
 
-// #include "pot/sync/async_lock.h"
+#include "pot/sync/async_lock.h"
 
 using pot::simd::SIMDType::SSE;
 using pot::simd::SIMDType::AVX;

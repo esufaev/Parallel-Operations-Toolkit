@@ -5,6 +5,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 set(TEST_SOURCES
   test_coro.cpp
   test_resume_on.cpp
+  test_async_lock.cpp
 )
 
 add_executable(tests ${TEST_SOURCES})
