@@ -9,14 +9,17 @@ project(
 
 get_directory_property(IS_SUBPROJECT PARENT_DIRECTORY)
 
-option(POT_BUILD_SHARED_LIBS "Build shared libraries" OFF)
-option(POT_BUILD_TESTS       "Enable unit testing"    ON )
-option(POT_CHECK_WARNINGS    "Strict compiler checks" ON )
+option(POT_BUILD_SHARED_LIBS     "Build shared libraries"      OFF)
+option(POT_BUILD_TESTS           "Enable unit testing"         ON )
+option(POT_CHECK_WARNINGS        "Strict compiler checks"      ON )
 
 # set(CMAKE_CXX_STANDARD 23)
 # set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_definitions(_SILENCE_ALL_CXX23_DEPRECATION_WARNINGS)
+
+add_compile_options(-fsanitize=address)
+add_link_options(-fsanitize=address)
 
 # Apply compiler flags
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/CompilerFlags.cmake)
@@ -39,6 +42,7 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/utils/this_thread.h
     include/${PROJECT_NAME}/utils/cache_line.h
     include/${PROJECT_NAME}/utils/unique_function.h    
+
     include/${PROJECT_NAME}/executors/executor.h
     include/${PROJECT_NAME}/executors/inline_executor.h
     include/${PROJECT_NAME}/executors/thread_executor.h
@@ -55,6 +59,8 @@ set(POT_HEADERS
     include/${PROJECT_NAME}/algorithms/reduce.h
     include/${PROJECT_NAME}/algorithms/dot.h
     include/${PROJECT_NAME}/algorithms/parsections.h
+
+    include/${PROJECT_NAME}/threads/thread.h
 
     include/${PROJECT_NAME}/pot.h
 )
@@ -99,6 +105,19 @@ install(TARGETS ${PROJECT_NAME}
     PUBLIC_HEADER DESTINATION include/${PROJECT_NAME}
 )
 
+include(FetchContent)
+
+FetchContent_Declare(
+    concurrencpp
+    GIT_REPOSITORY https://github.com/David-Haim/concurrencpp.git
+    GIT_TAG        master )
+
+FetchContent_MakeAvailable(concurrencpp)
+
+find_package(OpenMP REQUIRED)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(pot PRIVATE OpenMP::OpenMP_CXX)
+endif()
 
 # Testing
 if(POT_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)

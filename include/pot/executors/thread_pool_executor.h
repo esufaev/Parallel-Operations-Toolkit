@@ -1,156 +1,98 @@
 #pragma once
 
-#include <vector>
-#include <thread>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <chrono>
-#include <stdexcept>
+#include <queue>
+#include <thread>
+#include <vector>
 
 #include "pot/executors/executor.h"
-#include "pot/algorithms/lfqueue.h"
-#include "pot/utils/unique_function.h"
 
-namespace pot::executors
+namespace pot
 {
-    class thread_pool_executor_lflqt final : public executor
+
+class thread_pool_executor : public executor
+{
+  public:
+    thread_pool_executor(std::string name, size_t num_threads = std::thread::hardware_concurrency())
+        : executor(std::move(name))
     {
-    public:
-        explicit thread_pool_executor_lflqt(
-            std::string name,
-            std::size_t thread_count = std::thread::hardware_concurrency(),
-            std::size_t queue_capacity = 1024)
-            : executor(std::move(name)), m_thread_count(thread_count ? thread_count : 1), m_queue_capacity(queue_capacity ? queue_capacity : 1<<12)
+        m_threads.reserve(num_threads);
+        for (size_t i = 0; i < num_threads; ++i)
         {
-            m_queues.reserve(m_thread_count);
-            for (std::size_t i = 0; i < m_thread_count; ++i)
-                m_queues.emplace_back(std::make_unique<pot::algorithms::lfqueue<pot::utils::unique_function_once>>(m_queue_capacity));
-
-            m_workers.reserve(m_thread_count);
-            for (std::size_t i = 0; i < m_thread_count; ++i)
-                m_workers.emplace_back(&thread_pool_executor_lflqt::worker_loop, this, i);
+            m_threads.emplace_back([this] { worker_loop(); });
         }
+    }
 
-        ~thread_pool_executor_lflqt() override
+    ~thread_pool_executor() override { shutdown(); }
+
+    void derived_execute(std::function<void()> &&func) override
+    {
         {
-            shutdown();
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_stop)
+            {
+                throw std::runtime_error("Executor " + m_name + " is stopped.");
+            }
+            m_tasks.emplace(std::move(func));
         }
+        m_cv.notify_one();
+    }
 
-        std::size_t thread_count() const override { return m_thread_count; }
-
-        void stop() noexcept
+    void shutdown() override
+    {
         {
-            bool expected = false;
-            if (!m_stopping.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_stop)
                 return;
-            m_cv.notify_all();
+            m_stop = true;
         }
 
-        void join()
+        m_cv.notify_all();
+
+        for (auto &thread : m_threads)
         {
-            for (auto &t : m_workers)
+            if (thread.joinable())
             {
-                if (t.joinable())
-                    t.join();
+                thread.join();
             }
         }
+    }
 
-        void shutdown() override
+    [[nodiscard]] size_t thread_count() const override { return m_threads.size(); }
+
+  private:
+    void worker_loop()
+    {
+        while (true)
         {
-            stop();
-            join();
-        }
+            std::function<void()> task;
 
-    protected:
-        void derived_execute(pot::utils::unique_function_once &&f) override
-        {
-            if (m_stopping.load(std::memory_order_acquire))
-                throw std::runtime_error("shutting down");
-
-            std::size_t idx = m_round_robin.fetch_add(1, std::memory_order_relaxed) % m_thread_count;
-            
-            if (!m_queues[idx]->push_back(std::move(f)))
-                throw std::runtime_error("cant push_back lfqueue");
-            
-            m_pending.fetch_add(1, std::memory_order_release);
-            m_cv.notify_one();
-        }
-
-    private:
-        static constexpr std::size_t npos = static_cast<std::size_t>(-1); // temp
-        static inline thread_local std::size_t t_worker_index = npos;
-
-        std::size_t current_worker_index() const noexcept { return t_worker_index; }
-
-        void worker_loop(std::size_t my_index)
-        {
-            t_worker_index = my_index;
-
-            auto try_pop_execute = [&](std::size_t from_index) -> bool
             {
-                pot::utils::unique_function_once task;
-                if (m_queues[from_index]->pop(task))
-                {
-                    try 
-                    {
-                        task();
-                    } 
-                    catch (...) 
-                    {
-                        m_pending.fetch_sub(1, std::memory_order_acq_rel);
-                        throw;
-                    }
-                    m_pending.fetch_sub(1, std::memory_order_acq_rel);
-                    return true;
-                }
-                return false;
-            };
+                std::unique_lock<std::mutex> lock(m_mutex);
 
-            while (true)
-            {
-                if (try_pop_execute(my_index))
-                    continue;
+                m_cv.wait(lock, [this] { return m_stop || !m_tasks.empty(); });
 
-                bool stolen = false;
-                for (std::size_t k = 0; k < m_thread_count; ++k)
+                if (m_stop && m_tasks.empty())
                 {
-                    std::size_t victim = (my_index + k) % m_thread_count;
-                    if (try_pop_execute(victim))
-                    {
-                        stolen = true;
-                        break;
-                    }
+                    return;
                 }
 
-                if (stolen)
-                    continue;
-
-                if (m_stopping.load(std::memory_order_acquire) && m_pending.load(std::memory_order_acquire) == 0)
-                {
-                    break;
-                }
-
-                std::unique_lock<std::mutex> lk(m_cv_mtx);
-                m_cv.wait(lk, [&]
-                          { return m_stopping.load(std::memory_order_acquire) || m_pending.load(std::memory_order_acquire) > 0; });
+                task = std::move(m_tasks.front());
+                m_tasks.pop();
             }
 
-            t_worker_index = npos;
+            task();
         }
+    }
 
-    private:
-        const std::size_t m_thread_count;
-        const std::size_t m_queue_capacity;
+    std::vector<std::thread> m_threads;
+    std::queue<std::function<void()>> m_tasks;
 
-        std::vector<std::unique_ptr<pot::algorithms::lfqueue<pot::utils::unique_function_once>>> m_queues;
-        std::vector<std::thread> m_workers;
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+    bool m_stop{false};
+};
 
-        std::atomic<bool> m_stopping{false};
-        std::atomic<size_t> m_pending{0};
-        std::atomic<size_t> m_round_robin{0};
-
-        std::mutex m_cv_mtx;
-        std::condition_variable m_cv;
-    };
 } // namespace pot

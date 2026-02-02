@@ -1,65 +1,64 @@
 #pragma once
-
+#include "pot/algorithms/lfqueue.h"
+#include "pot/coroutines/task.h"
+#include "pot/utils/this_thread.h"
+#include "pot/utils/unique_function.h"
+#include <stop_token>
 #include <thread>
-#include <queue>
-#include <condition_variable>
-#include <mutex>
-#include <functional>
-#include <future>
+#include <utility>
 
 namespace pot
 {
-    class thread
+class thread
+{
+  public:
+    thread(size_t queue_size = 1024, std::string name = "Thread", int64_t local_id = 0)
+        : m_thread_queue(queue_size)
     {
-    public:
-        thread(size_t id, std::string thread_name)
-            : m_id(id), m_thread_name(std::move(thread_name)) {}
-        virtual ~thread() = default;
+        m_thread = std::jthread([this](std::stop_token st) { worker_loop(st); });
+    }
 
-        virtual bool joinable() const = 0;
-        virtual void join() = 0;
-        virtual void request_stop() = 0;
-        virtual void notify() = 0;
+    void set_name(std::string name)
+    {
+        run([name] { pot::this_thread::set_name(name); });
+    }
 
-        template <typename Func, typename... Args>
-        auto run(Func &&func, Args &&...args) -> std::invoke_result_t<Func, Args...>
-            requires std::is_invocable_v<Func, Args...>
+    template <typename FuncType, typename... Args> bool run(FuncType &&func, Args &&...args)
+    {
+        bool result =
+            m_thread_queue.push_back([f = std::move(func), ... args = std::move(args)]() mutable
+                                     { f(std::forward<Args>(args)...); });
+        return result;
+    }
+
+    void request_stop() { m_thread.request_stop(); }
+
+    void join()
+    {
+        while (!m_thread_queue.is_empty())
+            pot::this_thread::yield();
+        request_stop();
+        if (m_thread.joinable())
+            m_thread.join();
+    }
+
+    ~thread() { join(); }
+
+  private:
+    void worker_loop(std::stop_token st)
+    {
+        while (!st.stop_requested())
         {
-            using return_type = decltype(func(args...));
-            auto task = std::make_shared<std::packaged_task<return_type()>>(std::function<return_type()>(std::forward<Func>(func), std::forward<Args>(args)...));
-            std::future<return_type> result = task->get_future();
+            pot::utils::unique_function_once task;
+            if (m_thread_queue.pop(task))
             {
-                std::lock_guard lock(m_mutex);
-                m_tasks.emplace([task]
-                                { (*task)(); });
+                if (task)
+                    task();
             }
-            m_condition.notify_one();
-            return result;
         }
+    }
 
-        template <typename Func, typename... Args>
-        void run_detached(Func &&func, Args &&...args)
-            requires std::is_invocable_v<Func, Args...>
-        {
-            {
-                std::lock_guard lock(m_mutex);
-                m_tasks.emplace(std::function<void()>(std::forward<Func>(func), std::forward<Args>(args)...));
-            }
-            m_condition.notify_one();
-        }
-
-        [[nodiscard]] size_t id() const { return m_id; }
-        [[nodiscard]] std::string_view thread_name() const { return m_thread_name; }
-
-    protected:
-        std::mutex m_mutex;
-        std::condition_variable m_condition;
-        std::queue<std::function<void()>> m_tasks;
-
-        size_t m_id;
-        std::string m_thread_name;
-
-        std::jthread m_thread;
-        std::stop_source m_stop_source;
-    };
-}
+    std::jthread m_thread;
+    pot::algorithms::lfqueue<pot::utils::unique_function_once> m_thread_queue;
+};
+} // namespace pot

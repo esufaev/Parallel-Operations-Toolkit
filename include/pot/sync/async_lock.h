@@ -2,110 +2,108 @@
 
 #include <atomic>
 #include <coroutine>
-#include <utility>
-
-#include "pot/algorithms/lfqueue.h"
+#include <mutex>
+#include <queue>
 
 namespace pot::sync
 {
-    class async_lock
+
+class async_lock
+{
+  public:
+    class scoped_lock_guard
     {
-    public:
-        async_lock(size_t max_waiters = 1024) 
-            : waiters(max_waiters) {}
+      public:
+        explicit scoped_lock_guard(async_lock &lock) : m_lock(&lock) {}
 
-        async_lock(const async_lock &) = delete;
-        async_lock &operator=(const async_lock &) = delete;
-
-        struct scoped_lock
+        ~scoped_lock_guard()
         {
-            scoped_lock() noexcept : m_lock(nullptr) {}
-            explicit scoped_lock(async_lock *al) noexcept : m_lock(al) {}
+            if (m_lock)
+                m_lock->unlock();
+        }
 
-            scoped_lock(scoped_lock &&other) noexcept : m_lock(other.m_lock)
+        scoped_lock_guard(const scoped_lock_guard &) = delete;
+        scoped_lock_guard &operator=(const scoped_lock_guard &) = delete;
+
+        scoped_lock_guard(scoped_lock_guard &&other) noexcept : m_lock(other.m_lock)
+        {
+            other.m_lock = nullptr;
+        }
+
+        scoped_lock_guard &operator=(scoped_lock_guard &&other) noexcept
+        {
+            if (this != &other)
             {
+                if (m_lock)
+                    m_lock->unlock();
+                m_lock = other.m_lock;
                 other.m_lock = nullptr;
             }
-
-            scoped_lock &operator=(scoped_lock &&other) noexcept
-            {
-                if (this != &other)
-                {
-                    release();
-                    m_lock = other.m_lock;
-                    other.m_lock = nullptr;
-                }
-                return *this;
-            }
-
-            scoped_lock(const scoped_lock &) = delete;
-            scoped_lock &operator=(const scoped_lock &) = delete;
-
-            ~scoped_lock() noexcept { release(); }
-
-            explicit operator bool() const noexcept { return m_lock != nullptr; }
-
-        private:
-            void release() noexcept
-            {
-                if (!m_lock) return;
-                m_lock->release_and_resume_next();
-                m_lock = nullptr;
-            }
-
-            async_lock *m_lock;
-        };
-
-        auto lock() noexcept
-        {
-            struct awaitable
-            {
-                async_lock &parent;
-
-                bool await_ready() const noexcept { return false; }
-
-                bool await_suspend(std::coroutine_handle<> h) noexcept
-                {
-                    bool expected = false;
-                    if (parent.m_locked.compare_exchange_strong(
-                            expected, true, std::memory_order_acquire))
-                    {
-                        return false;
-                    }
-
-                    if (!parent.waiters.push_back(h))
-                    {
-                        throw std::runtime_error("async_lock waiters queue overflow");
-                    }
-                    return true;
-                }
-
-                scoped_lock await_resume() noexcept { return scoped_lock{&parent}; }
-            };
-
-            return awaitable{*this};
+            return *this;
         }
 
-        bool try_lock() noexcept
+      private:
+        async_lock *m_lock;
+    };
+
+    struct lock_awaiter
+    {
+        async_lock &m_lock;
+
+        bool await_ready() const noexcept
         {
             bool expected = false;
-            return m_locked.compare_exchange_strong(expected, true, std::memory_order_acquire);
+            return m_lock.m_is_locked.compare_exchange_strong(expected, true,
+                                                              std::memory_order_acquire);
         }
 
-    private:
-        void release_and_resume_next() noexcept
+        bool await_suspend(std::coroutine_handle<> h)
         {
-            std::coroutine_handle<> next{};
-            if (!waiters.pop(next))
+            std::lock_guard guard(m_lock.m_queue_mutex);
+
+            bool expected = false;
+            if (m_lock.m_is_locked.compare_exchange_strong(expected, true,
+                                                           std::memory_order_acquire))
             {
-                m_locked.store(false, std::memory_order_release);
-                return;
+                return false;
             }
 
-            if (next) next.resume();
+            m_lock.m_waiters.push(h);
+            return true;
         }
 
-        std::atomic<bool> m_locked{false};
-        pot::algorithms::lfqueue<std::coroutine_handle<>> waiters;
+        scoped_lock_guard await_resume() noexcept { return scoped_lock_guard{m_lock}; }
     };
+
+    [[nodiscard]] lock_awaiter lock() { return lock_awaiter{*this}; }
+
+  private:
+    void unlock()
+    {
+        std::coroutine_handle<> next_handle = nullptr;
+
+        {
+            std::lock_guard guard(m_queue_mutex);
+            if (m_waiters.empty())
+            {
+                m_is_locked.store(false, std::memory_order_release);
+            }
+            else
+            {
+                next_handle = m_waiters.front();
+                m_waiters.pop();
+            }
+        }
+
+        if (next_handle)
+        {
+            next_handle.resume();
+        }
+    }
+
+    std::atomic<bool> m_is_locked{false};
+    std::mutex m_queue_mutex;
+    std::queue<std::coroutine_handle<>> m_waiters;
+};
+
 } // namespace pot::sync

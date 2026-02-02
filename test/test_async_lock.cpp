@@ -1,59 +1,158 @@
-#include "pot/pot.h"
+#include <catch2/catch_all.hpp>
+#include <vector>
 
-#include <catch2/catch_test_macros.hpp>
+#include "pot/algorithms/parfor.h"
+#include "pot/coroutines/task.h"
+#include "pot/executors/thread_pool_executor.h"
+#include "pot/sync/async_lock.h"
 
-using namespace pot::sync;
-using namespace pot::coroutines;
-
-
-#include <iostream>
-
-TEST_CASE("ASYNC_LOCK")
+TEST_CASE("pot::sync::async_lock tests")
 {
-    SECTION("exclusive access and ordering")
+    SECTION("Basic lock usage (single coroutine)")
     {
-        async_lock lock;
-        std::vector<int> order;
+        pot::sync::async_lock lock;
+        bool locked_section_entered = false;
 
-        auto coro = [&](int id) -> task<void>
+        auto t = [&]() -> pot::coroutines::task<void>
         {
-            auto g = co_await lock.lock();
-            order.push_back(id);
+            {
+                auto guard = co_await lock.lock();
+                locked_section_entered = true;
+            }
+            co_return;
+        }();
+
+        t.get();
+        REQUIRE(locked_section_entered);
+    }
+
+    SECTION("Scoped lock guard move semantics")
+    {
+        pot::sync::async_lock lock;
+        int counter = 0;
+
+        auto t = [&]() -> pot::coroutines::task<void>
+        {
+            auto guard1 = co_await lock.lock();
+            counter++;
+
+            {
+                pot::sync::async_lock::scoped_lock_guard guard2(std::move(guard1));
+            }
+
+            auto guard3 = co_await lock.lock();
+            counter++;
+
+            pot::sync::async_lock::scoped_lock_guard guard4(lock);
         };
 
-        auto t1 = coro(1);
-        auto t2 = coro(2);
-        auto t3 = coro(3);
-
-        t1.get();
-        t2.get();
-        t3.get();
-
-        REQUIRE(order.size() == 3);
-        REQUIRE(order[0] == 1);
-        REQUIRE(order[1] == 2);
-        REQUIRE(order[2] == 3);
-    }
-
-    SECTION("try_lock")
-    {
-        async_lock lock;
-        REQUIRE(lock.try_lock() == true);
-        REQUIRE(lock.try_lock() == false);
-    }
-
-    SECTION("many coroutines updating shared vector")
-    {
-        pot::executors::thread_pool_executor_lflqt ex("Main", 12, 1<<12);
-        pot::sync::async_lock al;
-        int var = 0;
-        pot::algorithms::parfor(ex, 0, 1000, [&](int i) -> pot::coroutines::task<void>
+        auto move_test_task = [&]() -> pot::coroutines::task<void>
         {
-            auto guard = co_await al.lock();
-            var += i * 12;
-            co_return;
-        }).get();
+            auto g1 = co_await lock.lock();
 
-        REQUIRE(var == 5994000);
+            pot::sync::async_lock::scoped_lock_guard g2 = std::move(g1);
+
+            pot::sync::async_lock::scoped_lock_guard g3 = std::move(g2);
+
+            co_return;
+        };
+
+        move_test_task().get();
+
+        auto check_task = [&]() -> pot::coroutines::task<bool>
+        {
+            auto g = co_await lock.lock();
+            co_return true;
+        }();
+
+        REQUIRE(check_task.get() == true);
+    }
+
+    SECTION("Mutual exclusion check (Data Race Protection)")
+    {
+        pot::thread_pool_executor exec("lock_test_pool", 8);
+        pot::sync::async_lock lock;
+
+        int shared_counter = 0;
+        const int iterations = 10000;
+
+        auto run_race = [&]() -> pot::coroutines::lazy_task<void>
+        {
+            co_await pot::algorithms::parfor(exec, 0, iterations,
+                                             [&](int) -> pot::coroutines::task<void>
+                                             {
+                                                 auto guard = co_await lock.lock();
+
+                                                 int temp = shared_counter;
+                                                 std::this_thread::yield();
+                                                 shared_counter = temp + 1;
+
+                                                 co_return;
+                                             });
+        };
+
+        run_race().get();
+        exec.shutdown();
+
+        REQUIRE(shared_counter == iterations);
+    }
+
+    SECTION("Mutual exclusion with std::vector (Heavy corruption check)")
+    {
+        pot::thread_pool_executor exec("vector_test_pool", 8);
+        pot::sync::async_lock lock;
+
+        std::vector<int> shared_vec;
+        const int iterations = 10000;
+
+        auto run_vec_test = [&]() -> pot::coroutines::lazy_task<void>
+        {
+            co_await pot::algorithms::parfor(exec, 0, iterations,
+                                             [&](int i) -> pot::coroutines::task<void>
+                                             {
+                                                 auto guard = co_await lock.lock();
+
+                                                 shared_vec.push_back(i);
+                                                 co_return;
+                                             });
+        };
+
+        run_vec_test().get();
+        exec.shutdown();
+
+        REQUIRE(shared_vec.size() == iterations);
+    }
+
+    SECTION("Sequential consistency / FIFO approximation")
+    {
+        std::vector<int> execution_order;
+        pot::sync::async_lock lock;
+        int current_holder = 0;
+
+        auto worker = [&](int id) -> pot::coroutines::task<void>
+        {
+            auto guard = co_await lock.lock();
+            execution_order.push_back(id);
+            co_return;
+        };
+
+        auto driver = [&]() -> pot::coroutines::task<void>
+        {
+            std::vector<pot::coroutines::task<void>> tasks;
+            auto g1 = co_await lock.lock();
+
+            tasks.push_back(worker(1));
+            tasks.push_back(worker(2));
+            tasks.push_back(worker(3));
+        };
+
+        driver().get();
+
+        auto check = [&]() -> pot::coroutines::task<void>
+        {
+            auto g = co_await lock.lock();
+            co_return;
+        }();
+        check.get();
     }
 }

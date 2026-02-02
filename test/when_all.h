@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-#include "pot/coroutines/task.h"
+#include "pot/coroutines/test_task.h"
 
 namespace pot::coroutines
 {

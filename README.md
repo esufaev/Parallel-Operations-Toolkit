@@ -635,4 +635,3 @@ pot::coroutines::task<void> do_work(pot::executor& cpu1, pot::executor& cpu2)
     co_return;
 }
 ```
-
