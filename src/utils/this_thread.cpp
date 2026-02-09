@@ -26,6 +26,15 @@ int64_t pot::this_thread::system_id()
     return static_cast<int64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
+std::string pot::this_thread::executor_name()
+{
+    if (pot::details::this_thread::tl_owner_executor)
+    {
+        return pot::details::this_thread::tl_owner_executor->name();
+    }
+    return "None";
+}
+
 int64_t pot::this_thread::local_id() { return details::this_thread::tl_local_id; }
 
 int64_t pot::this_thread::global_id() { return details::this_thread::tl_global_id; }

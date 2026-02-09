@@ -39,6 +39,8 @@ void sleep_until(const std::chrono::time_point<Clock, Duration> &time_point)
 
 void yield();
 
+[[nodiscard]] std::string executor_name();
+
 bool set_params(int policy, int priority);
 std::pair<int, int> get_params();
 

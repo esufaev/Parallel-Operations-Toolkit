@@ -3,10 +3,11 @@ include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 
 # Create test executable
 set(TEST_SOURCES
-  test_async_lock.cpp
-  test_task.cpp
-  test_parfor.cpp
-  test_executor.cpp
+  # test_async_lock.cpp
+  # test_task.cpp
+  # test_parfor.cpp
+  # test_executor.cpp
+  test_speed_executor.cpp
   # test_thread.cpp
 )
 
@@ -16,6 +17,7 @@ add_executable(tests ${TEST_SOURCES})
 target_link_libraries(tests PRIVATE pot Catch2::Catch2WithMain)
 target_link_libraries(tests PRIVATE pot Eigen3::Eigen)
 target_link_libraries(tests PRIVATE pot concurrencpp::concurrencpp)
+target_link_libraries(tests PRIVATE pot fmt::fmt)
 target_link_libraries(tests PRIVATE pot OpenMP::OpenMP_CXX)
 
 # apply_warning_flags_to_targets(tests) # Apply warning flags

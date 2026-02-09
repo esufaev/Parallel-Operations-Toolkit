@@ -8,6 +8,8 @@
 #include <utility>
 #include <variant>
 
+#include "pot/memory/coro_memory.h"
+
 namespace pot::coroutines::detail
 {
 template <typename T> struct basic_promise_type
@@ -18,6 +20,13 @@ template <typename T> struct basic_promise_type
                            std::variant<std::monostate, T, std::exception_ptr>>;
 
     void unhandled_exception() { set_exception(std::current_exception()); }
+
+    void *operator new(std::size_t size) { return pot::memory::get_coro_pool().allocate(size); }
+
+    void operator delete(void *ptr, std::size_t size)
+    {
+        pot::memory::get_coro_pool().deallocate(ptr, size);
+    }
 
     template <typename U = T>
         requires(!std::is_void_v<T> && std::is_convertible_v<U, T>)

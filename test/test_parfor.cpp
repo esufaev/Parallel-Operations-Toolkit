@@ -8,7 +8,7 @@
 
 TEST_CASE("Parfor: Concurrency and Thread Distribution", "[parfor]")
 {
-    pot::thread_pool_executor pool("parfor_pool", 4);
+    pot::executors::thread_pool_executor_gq pool("parfor_pool", 4);
 
     SECTION("Executes on multiple threads")
     {
@@ -32,7 +32,7 @@ TEST_CASE("Parfor: Concurrency and Thread Distribution", "[parfor]")
 
 TEST_CASE("Parfor: Data Integrity and Captures", "[parfor]")
 {
-    pot::thread_pool_executor pool("data_pool");
+    pot::executors::thread_pool_executor_gq pool("data_pool");
 
     SECTION("Correctly handles Capture by Reference (Shared State)")
     {
@@ -74,7 +74,7 @@ TEST_CASE("Parfor: Data Integrity and Captures", "[parfor]")
 
 TEST_CASE("Parfor: Async Body (Coroutines inside loop)", "[parfor][async]")
 {
-    pot::thread_pool_executor pool("async_pool", 4);
+    pot::executors::thread_pool_executor_gq pool("async_pool", 4);
 
     SECTION("Loop body returns task<void> (Implicit await)")
     {
@@ -110,7 +110,7 @@ TEST_CASE("Parfor: Async Body (Coroutines inside loop)", "[parfor][async]")
 
 TEST_CASE("Parfor: Usage via co_await vs .get()", "[parfor]")
 {
-    pot::thread_pool_executor pool("usage_pool", 2);
+    pot::executors::thread_pool_executor_gq pool("usage_pool", 2);
 
     SECTION("Called via .get() (Blocking)")
     {
@@ -156,7 +156,7 @@ TEST_CASE("Parfor: Usage via co_await vs .get()", "[parfor]")
 
 TEST_CASE("Parfor: Edge Cases", "[parfor][edge]")
 {
-    pot::thread_pool_executor pool("edge_pool", 2);
+    pot::executors::thread_pool_executor_gq pool("edge_pool", 2);
 
     SECTION("Single Iteration")
     {

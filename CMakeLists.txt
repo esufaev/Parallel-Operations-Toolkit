@@ -62,6 +62,8 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/threads/thread.h
 
+    include/${PROJECT_NAME}/memory/coro_memory.h
+
     include/${PROJECT_NAME}/pot.h
 )
 
@@ -113,6 +115,15 @@ FetchContent_Declare(
     GIT_TAG        master )
 
 FetchContent_MakeAvailable(concurrencpp)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG        10.2.1   )
+
+FetchContent_MakeAvailable(fmt)
 
 find_package(OpenMP REQUIRED)
 if(OpenMP_CXX_FOUND)

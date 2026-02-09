@@ -1,123 +1,117 @@
 #pragma once
 
 #include <atomic>
-#include <thread>
-#include <vector>
-
-#include "pot/utils/cache_line.h"
+#include <optional>
 
 namespace pot::algorithms
 {
-template <typename T> class alignas(pot::cache_line_alignment) lfqueue
+
+const size_t MPSC_QUEUE_CAPACITY = 1024; // temp
+
+template <typename T> class lfqueue
 {
-    struct alignas(pot::cache_line_alignment) cell_t
+  public:
+    lfqueue();
+    ~lfqueue();
+
+    [[nodiscard]] std::optional<T> pop() noexcept;
+    [[nodiscard]] bool push(const T &msg) noexcept;
+
+  private:
+    struct cell_t
     {
-        std::atomic<size_t> m_sequence;
-        T m_data;
+        std::atomic<size_t> sequence;
+        T data;
     };
 
-    alignas(pot::cache_line_alignment) std::vector<cell_t> buffer;
-    alignas(pot::cache_line_alignment) size_t buffer_mask;
-    alignas(pot::cache_line_alignment) std::atomic<size_t> epos, dpos;
+    static constexpr size_t capacity = MPSC_QUEUE_CAPACITY;
+    static constexpr size_t mask = capacity - 1;
 
-  public:
-    lfqueue(size_t size) : buffer(size), buffer_mask(size - 1)
-    {
-        if (size > (1 << 30))
-            throw std::runtime_error("buffer size too large");
-        if (size < 2)
-            throw std::runtime_error("buffer size too small");
-        if ((size & (size - 1)) != 0)
-            throw std::runtime_error("buffer size is not power of 2");
+    cell_t *buffer;
 
-        for (size_t i = 0; i != size; ++i)
-            buffer[i].m_sequence.store(i, std::memory_order_relaxed);
-
-        epos.store(0, std::memory_order_relaxed);
-        dpos.store(0, std::memory_order_relaxed);
-    }
-
-    bool push_back(T data)
-    {
-        cell_t *cell;
-        size_t curent_pos;
-        bool result = false;
-
-        while (!result)
-        {
-            curent_pos = epos.load(std::memory_order_acquire);
-            cell = &buffer[curent_pos & buffer_mask];
-            auto sequence = cell->m_sequence.load();
-            auto diff = static_cast<int>(sequence) - static_cast<int>(curent_pos);
-
-            if (diff < 0)
-                return false;
-
-            if (diff == 0)
-                result = epos.compare_exchange_weak(curent_pos, curent_pos + 1,
-                                                    std::memory_order_relaxed);
-        }
-
-        cell->m_data = std::move(data);
-        cell->m_sequence.store(curent_pos + 1, std::memory_order_release);
-        return true;
-    }
-
-    bool pop(T &data)
-    {
-        cell_t *cell;
-        size_t curent_pos;
-        bool result = false;
-
-        while (!result)
-        {
-            curent_pos = dpos.load(std::memory_order_relaxed);
-            cell = &buffer[curent_pos & buffer_mask];
-            auto sequence = cell->m_sequence.load(std::memory_order_acquire);
-            auto diff = static_cast<int>(sequence) - static_cast<int>(curent_pos + 1);
-
-            if (diff < 0)
-                return false;
-
-            if (diff == 0)
-                result = dpos.compare_exchange_weak(curent_pos, curent_pos + 1,
-                                                    std::memory_order_relaxed);
-        }
-
-        data = std::move(cell->m_data);
-        cell->m_sequence.store(curent_pos + buffer_mask + 1, std::memory_order_release);
-        return true;
-    }
-
-    bool is_empty() const { return epos.load() == dpos.load(); }
-
-    size_t available_space() const
-    {
-        auto enq = epos.load(std::memory_order_relaxed);
-        auto deq = dpos.load(std::memory_order_relaxed);
-        return buffer.size() - (enq - deq);
-    }
-
-    size_t size() const
-    {
-        auto enq = epos.load(std::memory_order_relaxed);
-        auto deq = dpos.load(std::memory_order_relaxed);
-        return enq - deq;
-    }
-
-    size_t capacity() const { return buffer.size(); }
-
-    void push_back_blocking(T data)
-    {
-        while (!push_back(data))
-            std::this_thread::yield();
-    }
-
-    bool pop_front_blocking(T &data)
-    {
-        while (!pop(data))
-            std::this_thread::yield();
-        return true;
-    }
+    alignas(64) std::atomic<size_t> enqueuePos{0};
+    alignas(64) std::atomic<size_t> dequeuePos{0};
 };
+
+template <typename T> lfqueue<T>::lfqueue()
+{
+    static_assert((capacity > 0 && ((capacity & (capacity - 1)) == 0)),
+                  "Capacity must be a power of 2");
+
+    buffer = new cell_t[capacity];
+
+    for (size_t i = 0; i < capacity; ++i)
+    {
+        buffer[i].sequence.store(i, std::memory_order_relaxed);
+    }
+}
+
+template <typename T> lfqueue<T>::~lfqueue() { delete[] buffer; }
+
+template <typename T> bool lfqueue<T>::push(const T &msg) noexcept
+{
+    cell_t *cell;
+    size_t pos = enqueuePos.load(std::memory_order_relaxed);
+
+    while (true)
+    {
+        cell = &buffer[pos & mask];
+        size_t seq = cell->sequence.load(std::memory_order_acquire);
+        intptr_t dif = (intptr_t)seq - (intptr_t)pos;
+
+        if (dif == 0)
+        {
+            if (enqueuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
+            {
+                cell->data = msg;
+
+                cell->sequence.store(pos + 1, std::memory_order_release);
+                return true;
+            }
+        }
+        else if (dif < 0)
+        {
+            return false;
+        }
+        else
+        {
+            pos = enqueuePos.load(std::memory_order_relaxed);
+        }
+    }
+}
+
+template <typename T> std::optional<T> lfqueue<T>::pop() noexcept
+{
+    cell_t *cell;
+    size_t pos = dequeuePos.load(std::memory_order_relaxed);
+
+    while (true)
+    {
+        cell = &buffer[pos & mask];
+        size_t seq = cell->sequence.load(std::memory_order_acquire);
+
+        intptr_t dif = (intptr_t)seq - (intptr_t)(pos + 1);
+
+        if (dif == 0)
+        {
+            if (dequeuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
+            {
+                auto result = std::move(cell->data);
+
+                cell->sequence.store(pos + mask + 1, std::memory_order_release);
+
+                return std::make_optional(std::move(result));
+            }
+        }
+        else if (dif < 0)
+        {
+            return std::nullopt;
+        }
+        else
+        {
+            pos = dequeuePos.load(std::memory_order_relaxed);
+        }
+    }
+}
+
 } // namespace pot::algorithms
