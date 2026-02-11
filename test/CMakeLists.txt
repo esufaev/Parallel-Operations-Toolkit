@@ -7,7 +7,8 @@ set(TEST_SOURCES
   # test_task.cpp
   # test_parfor.cpp
   # test_executor.cpp
-  test_speed_executor.cpp
+  # test_LU.cpp
+  test_fill.cpp
   # test_thread.cpp
 )
 

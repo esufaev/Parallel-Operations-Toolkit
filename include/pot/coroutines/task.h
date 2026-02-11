@@ -21,11 +21,21 @@ template <typename T> struct basic_promise_type
 
     void unhandled_exception() { set_exception(std::current_exception()); }
 
-    void *operator new(std::size_t size) { return pot::memory::get_coro_pool().allocate(size); }
+    static void *operator new(std::size_t size) { return pot::memory::allocate(size); }
 
-    void operator delete(void *ptr, std::size_t size)
+    static void *operator new(std::size_t size, std::align_val_t alignment)
     {
-        pot::memory::get_coro_pool().deallocate(ptr, size);
+        return pot::memory::allocate(size, static_cast<std::size_t>(alignment));
+    }
+
+    static void operator delete(void *ptr, std::size_t size) noexcept
+    {
+        pot::memory::deallocate(ptr, size);
+    }
+
+    static void operator delete(void *ptr, std::size_t size, std::align_val_t alignment) noexcept
+    {
+        pot::memory::deallocate(ptr, size, static_cast<std::size_t>(alignment));
     }
 
     template <typename U = T>
