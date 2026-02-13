@@ -21,13 +21,6 @@ class resume_on_awaitable
 
 namespace pot::coroutines
 {
-/**
- * @brief Returns an awaitable that resumes the awaiting coroutine on the given executor.
- *
- * @param executor Executor where the coroutine should continue execution.
- * @return An awaitable that, when awaited, schedules resumption on @p executor.
- *
- */
 inline auto resume_on(pot::executor &executor) noexcept
 {
     return pot::details::resume_on_awaitable(executor);

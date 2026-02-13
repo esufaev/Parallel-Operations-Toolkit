@@ -10,6 +10,7 @@ set(TEST_SOURCES
   # test_LU.cpp
   test_fill.cpp
   # test_thread.cpp
+  # test_resume_on.cpp
 )
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
