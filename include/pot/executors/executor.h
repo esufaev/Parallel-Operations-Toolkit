@@ -54,17 +54,14 @@ class executor
 
   private:
     template <bool Lazy, typename Func, typename... Args>
-    auto do_run(Func &&func, Args &&...args) -> std::conditional_t<
+    
+    auto do_run(Func func, Args... args) -> std::conditional_t<
         Lazy,
         pot::coroutines::lazy_task<
             pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>,
         pot::coroutines::task<pot::traits::awaitable_value_t<std::invoke_result_t<Func, Args...>>>>
     {
         using Ret = std::invoke_result_t<Func, Args...>;
-        using Val = pot::traits::awaitable_value_t<Ret>;
-
-        using ReturnTaskType =
-            std::conditional_t<Lazy, pot::coroutines::lazy_task<Val>, pot::coroutines::task<Val>>;
 
         struct schedule_awaiter
         {
@@ -79,30 +76,24 @@ class executor
             void await_resume() const noexcept {}
         };
 
-        auto co_wrapper = [](executor *exec, auto fn, auto args_tuple) mutable -> ReturnTaskType
+        co_await schedule_awaiter{this};
+        
+        if constexpr (std::is_void_v<Ret>)
         {
-            co_await schedule_awaiter{exec};
-
-            if constexpr (std::is_void_v<Ret>)
+            std::invoke(std::move(func), std::move(args)...);
+            co_return;
+        }
+        else
+        {
+            if constexpr (pot::traits::is_task_v<Ret> || pot::traits::is_lazy_task_v<Ret>)
             {
-                std::apply(std::move(fn), std::move(args_tuple));
-                co_return;
+                co_return co_await std::invoke(std::move(func), std::move(args)...);
             }
             else
             {
-                if constexpr (pot::traits::is_task_v<Ret> || pot::traits::is_lazy_task_v<Ret>)
-                {
-                    co_return co_await std::apply(std::move(fn), std::move(args_tuple));
-                }
-                else
-                {
-                    co_return std::apply(std::move(fn), std::move(args_tuple));
-                }
+                co_return std::invoke(std::move(func), std::move(args)...);
             }
-        };
-
-        return co_wrapper(this, std::decay_t<Func>(std::forward<Func>(func)),
-                          std::make_tuple(std::decay_t<Args>(std::forward<Args>(args))...));
+        }
     }
 };
-} // namespace pot
+} 
