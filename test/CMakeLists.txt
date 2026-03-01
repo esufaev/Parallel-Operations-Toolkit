@@ -4,7 +4,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/Catch2.cmake)
 # Create test executable
 set(TEST_SOURCES
   # test_async_lock.cpp
-  test_async_lock_lf.cpp
+  # test_async_lock_lf.cpp
   # test_task.cpp
   # test_parfor.cpp
   # test_executor.cpp
@@ -15,6 +15,8 @@ set(TEST_SOURCES
   # test_exp.cpp
   # test_mandelbrot.cpp
   # test_disb.cpp
+  # test_meta.cpp
+  test_thread_pools_bench.cpp
 )
 
 find_package(Eigen3 REQUIRED)
