@@ -15,6 +15,8 @@
 
 #include "pot/executors/executor.h"
 #include "pot/utils/this_thread.h"
+#include "pot/algorithms/lfqueue.h"
+#include "pot/algorithms/lfdequeue.h"
 
 namespace pot
 {
@@ -37,7 +39,7 @@ namespace pot
 		std::mutex mtx;
 	};
 
-} // namespace pot
+} 
 
 namespace pot::executors
 {
@@ -292,6 +294,7 @@ namespace pot::executors
 				std::lock_guard lock(ctx.queue.mtx);
 				ctx.queue.tasks.emplace(std::move(func));
 			}
+
 			ctx.notifier.fetch_add(1, std::memory_order_release);
 			ctx.notifier.notify_one();
 		}
@@ -1065,4 +1068,372 @@ namespace pot::executors
 		std::atomic<uint64_t> m_notifier{0};
 		std::atomic<bool> m_stop{false};
 	};
-} // namespace pot::executors
+
+	class thread_pool_executor_lqlf_steal_seq final : public executor
+	{
+		struct thread_context
+		{
+			pot::algorithms::lfqueue<std::function<void()>> queue; 
+			std::atomic<uint64_t> notifier{0};
+		};
+
+	public:
+		thread_pool_executor_lqlf_steal_seq(std::string name,
+												  size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency()))
+			: executor(std::move(name))
+		{
+			m_contexts.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				m_contexts.push_back(std::make_unique<thread_context>());
+			}
+
+			m_threads.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				std::string worker_name = m_name + "-W" + std::to_string(i);
+				m_threads.emplace_back([this, worker_name = std::move(worker_name), i](std::stop_token st)
+									   { worker_loop(std::move(st), std::move(worker_name), i); });
+			}
+		}
+
+		~thread_pool_executor_lqlf_steal_seq() override
+		{
+			shutdown();
+		}
+
+		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		{
+			if (m_stop.load(std::memory_order_acquire))
+			{
+				throw std::runtime_error("Executor " + m_name + " is stopped.");
+			}
+
+			size_t idx = m_next_thread_idx.fetch_add(1, std::memory_order_relaxed) % m_threads.size();
+			auto &ctx = *m_contexts[idx];
+
+			std::function<void()> f = std::move(func);
+			while (!ctx.queue.push(f))
+			{
+				std::this_thread::yield();
+			}
+
+			ctx.notifier.fetch_add(1, std::memory_order_release);
+			ctx.notifier.notify_one();
+		}
+
+		bool try_steal() override
+		{
+			for (auto &iter_ctx : m_contexts)
+			{
+				if (auto stolen_task = iter_ctx->queue.pop())
+				{
+					(*stolen_task)(); 
+					return true;      
+				}
+			}
+			return false; 
+		}
+
+		void shutdown() override
+		{
+			bool expected = false;
+			if (!m_stop.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+			{
+				return;
+			}
+
+			for (auto &thread : m_threads)
+			{
+				thread.request_stop();
+			}
+
+			for (auto &ctx : m_contexts)
+			{
+				ctx->notifier.fetch_add(1, std::memory_order_release);
+				ctx->notifier.notify_all();
+			}
+
+			m_threads.clear();
+		}
+
+		[[nodiscard]] size_t thread_count() const override
+		{
+			return m_threads.size();
+		}
+
+	private:
+		void worker_loop(std::stop_token st, std::string name, int64_t local_id)
+		{
+			pot::this_thread::init_thread_variables(local_id, this);
+			pot::this_thread::set_name(name);
+
+			auto &my_ctx = *m_contexts[local_id];
+			size_t num_queues = m_contexts.size();
+
+			while (!st.stop_requested())
+			{
+				uint64_t wait_val = my_ctx.notifier.load(std::memory_order_acquire);
+				std::function<void()> task;
+
+				if (auto local_task = my_ctx.queue.pop())
+				{
+					task = std::move(*local_task);
+				}
+				
+				if (!task && num_queues > 1)
+				{
+					for (size_t i = 1; i < num_queues; ++i)
+					{
+						size_t target_idx = (local_id + i) % num_queues;
+						auto &target_ctx = *m_contexts[target_idx];
+						
+						if (auto stolen_task = target_ctx.queue.pop())
+						{
+							task = std::move(*stolen_task);
+							break;
+						}
+					}
+				}
+				
+				if (task)
+				{
+					task();
+				}
+				else
+				{
+					if (st.stop_requested())
+					{
+						return;
+					}
+					my_ctx.notifier.wait(wait_val, std::memory_order_acquire);
+				}
+			}
+		}
+
+		std::vector<std::jthread> m_threads;
+		std::vector<std::unique_ptr<thread_context>> m_contexts;
+		std::atomic<size_t> m_next_thread_idx{0};
+		std::atomic<bool> m_stop{false};
+	};
+
+	class thread_pool_executor_lfgq final : public executor
+	{
+	public:
+		thread_pool_executor_lfgq(std::string name,
+								  size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency()))
+			: executor(std::move(name))
+		{
+			m_threads.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				std::string worker_name = m_name + "-W" + std::to_string(i);
+				m_threads.emplace_back([this, worker_name = std::move(worker_name), i](std::stop_token st)
+									   { worker_loop(std::move(st), std::move(worker_name), i); });
+			}
+		}
+
+		~thread_pool_executor_lfgq() override
+		{
+			shutdown();
+		}
+
+		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		{
+			if (m_stop.load(std::memory_order_acquire))
+			{
+				throw std::runtime_error("Executor " + m_name + " is stopped.");
+			}
+
+			
+			std::function<void()> f = std::move(func);
+			while (!m_queue.push(f))
+			{
+				std::this_thread::yield();
+			}
+
+			m_notifier.fetch_add(1, std::memory_order_release);
+			m_notifier.notify_one();
+		}
+
+		void shutdown() override
+		{
+			bool expected = false;
+			if (!m_stop.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+			{
+				return;
+			}
+
+			for (auto &thread : m_threads)
+			{
+				thread.request_stop();
+			}
+
+			m_notifier.fetch_add(m_threads.size(), std::memory_order_release);
+			m_notifier.notify_all();
+
+			m_threads.clear();
+		}
+
+		[[nodiscard]] size_t thread_count() const override
+		{
+			return m_threads.size();
+		}
+
+	private:
+		void worker_loop(std::stop_token st, std::string name, int64_t local_id)
+		{
+			pot::this_thread::init_thread_variables(local_id, this);
+			pot::this_thread::set_name(name);
+
+			while (!st.stop_requested())
+			{
+				uint64_t wait_val = m_notifier.load(std::memory_order_acquire);
+				std::function<void()> task;
+
+				if (auto local_task = m_queue.pop())
+				{
+					task = std::move(*local_task);
+				}
+
+				if (task)
+				{
+					task();
+				}
+				else
+				{
+					if (st.stop_requested())
+					{
+						return;
+					}
+					m_notifier.wait(wait_val, std::memory_order_acquire);
+				}
+			}
+		}
+
+		std::vector<std::jthread> m_threads;
+		pot::algorithms::lfqueue<std::function<void()>> m_queue;
+		std::atomic<uint64_t> m_notifier{0};
+		std::atomic<bool> m_stop{false};
+	};
+
+	class thread_pool_executor_lflq final : public executor
+	{
+		struct thread_context
+		{
+			pot::algorithms::lfqueue<std::function<void()>> queue;
+			std::atomic<uint64_t> notifier{0};
+		};
+
+	public:
+		thread_pool_executor_lflq(std::string name,
+								  size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency()))
+			: executor(std::move(name))
+		{
+			m_contexts.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				m_contexts.push_back(std::make_unique<thread_context>());
+			}
+
+			m_threads.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				std::string worker_name = m_name + "-W" + std::to_string(i);
+				m_threads.emplace_back([this, worker_name = std::move(worker_name), i](std::stop_token st)
+									   { worker_loop(std::move(st), std::move(worker_name), i); });
+			}
+		}
+
+		~thread_pool_executor_lflq() override
+		{
+			shutdown();
+		}
+
+		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		{
+			if (m_stop.load(std::memory_order_acquire))
+			{
+				throw std::runtime_error("Executor " + m_name + " is stopped.");
+			}
+
+			size_t idx = m_next_thread_idx.fetch_add(1, std::memory_order_relaxed) % m_threads.size();
+			auto &ctx = *m_contexts[idx];
+
+			std::function<void()> f = std::move(func);
+			while (!ctx.queue.push(f))
+			{
+				std::this_thread::yield();
+			}
+
+			ctx.notifier.fetch_add(1, std::memory_order_release);
+			ctx.notifier.notify_one();
+		}
+
+		void shutdown() override
+		{
+			bool expected = false;
+			if (!m_stop.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+			{
+				return;
+			}
+
+			for (auto &thread : m_threads)
+			{
+				thread.request_stop();
+			}
+
+			for (auto &ctx : m_contexts)
+			{
+				ctx->notifier.fetch_add(1, std::memory_order_release);
+				ctx->notifier.notify_all();
+			}
+
+			m_threads.clear();
+		}
+
+		[[nodiscard]] size_t thread_count() const override
+		{
+			return m_threads.size();
+		}
+
+	private:
+		void worker_loop(std::stop_token st, std::string name, int64_t local_id)
+		{
+			pot::this_thread::init_thread_variables(local_id, this);
+			pot::this_thread::set_name(name);
+
+			auto &ctx = *m_contexts[local_id];
+
+			while (!st.stop_requested())
+			{
+				uint64_t wait_val = ctx.notifier.load(std::memory_order_acquire);
+				std::function<void()> task;
+
+				
+				if (auto local_task = ctx.queue.pop())
+				{
+					task = std::move(*local_task);
+				}
+
+				if (task)
+				{
+					task();
+				}
+				else
+				{
+					if (st.stop_requested())
+					{
+						return;
+					}
+					ctx.notifier.wait(wait_val, std::memory_order_acquire);
+				}
+			}
+		}
+
+		std::vector<std::jthread> m_threads;
+		std::vector<std::unique_ptr<thread_context>> m_contexts;
+		std::atomic<size_t> m_next_thread_idx{0};
+		std::atomic<bool> m_stop{false};
+	};
+} 

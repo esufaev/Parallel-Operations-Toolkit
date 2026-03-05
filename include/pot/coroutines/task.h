@@ -2,29 +2,40 @@
 
 #include <atomic>
 #include <coroutine>
-#include <iostream>
 #include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <functional>
+#include <iostream>
 
 #include "pot/memory/coro_memory.h"
+
+namespace pot
+{
+    class executor; 
+}
 
 namespace pot::coroutines::details
 {
 	struct task_meta
 	{
 		std::atomic<size_t> run_count{0};
+		std::function<bool()> steal;
+		static inline std::vector<int> sorted_cpu_list{};
 
 		task_meta() = default;
 		task_meta(const task_meta &other)
 		{
 			run_count.store(other.run_count.load(std::memory_order_relaxed), std::memory_order_relaxed);
+			steal = other.steal;
 		}
 		task_meta &operator=(const task_meta &other)
 		{
 			run_count.store(other.run_count.load(std::memory_order_relaxed), std::memory_order_relaxed);
+			steal = other.steal;
+
 			return *this;
 		}
 	};
@@ -89,12 +100,31 @@ namespace pot::coroutines::detail
 		void wait()
 		{
 			while (!m_ready.load(std::memory_order_acquire))
-				std::this_thread::yield();
+			{
+				if (!meta.steal()) 
+				{
+					std::this_thread::yield();
+				}
+			}
 		}
+
+		void blocking_wait() { m_ready.wait(false, std::memory_order_acquire); }
 
 		T get()
 		{
 			wait();
+			if (std::holds_alternative<std::exception_ptr>(m_data))
+				std::rethrow_exception(std::get<std::exception_ptr>(m_data));
+
+			if constexpr (std::is_void_v<T>)
+				return;
+			else
+				return std::get<T>(m_data);
+		}
+
+		T blocking_get()
+		{
+			blocking_wait();
 			if (std::holds_alternative<std::exception_ptr>(m_data))
 				std::rethrow_exception(std::get<std::exception_ptr>(m_data));
 
@@ -125,6 +155,7 @@ namespace pot::coroutines::detail
 				}
 
 				h.promise().m_ready.store(true, std::memory_order_release);
+				h.promise().m_ready.notify_all(); 
 
 				return next;
 			}
@@ -151,6 +182,19 @@ namespace pot::coroutines
 		using promise_type = task_promise_type_impl<T>;
 		using handle_type = std::coroutine_handle<promise_type>;
 		using value_type = T;
+
+		struct handle_guard
+		{
+			handle_type& h;
+			~handle_guard()
+			{
+				if (h)
+				{
+					h.destroy();
+					h = nullptr;
+				}
+			}
+		};
 
 		explicit task(handle_type handle) noexcept : m_handle(handle)
 		{
@@ -209,61 +253,40 @@ namespace pot::coroutines
 
 		T await_resume()
 		{
-			if constexpr (std::is_void_v<T>)
-			{
-				m_handle.promise().get();
-				m_handle.destroy();
-				m_handle = nullptr;
-				return;
-			}
-			else
-			{
-				auto result = m_handle.promise().get();
-				m_handle.destroy();
-				m_handle = nullptr;
-				return result;
-			}
+			handle_guard guard{m_handle};
+			return m_handle.promise().get();
 		}
 
-		auto get()
+		template <typename ExecType = pot::executor>
+		auto get(ExecType* executor = nullptr)
 		{
 			if (!m_handle)
 			{
 				throw std::runtime_error("Coroutine is invalid");
 			}
 
-			if constexpr (std::is_void_v<T>)
+			if (executor)
 			{
-				try
+				m_handle.promise().meta.steal = [executor]() 
 				{
-					m_handle.promise().get();
-				}
-				catch (...)
-				{
-					m_handle.destroy();
-					m_handle = nullptr;
-					throw;
-				}
-				m_handle.destroy();
-				m_handle = nullptr;
-				return;
+					return executor->try_steal();
+				};
 			}
-			else
+
+			handle_guard gurad{m_handle}; 
+			return m_handle.promise().get();
+		}
+
+		auto blocking_get()
+		{
+			if (!m_handle)
 			{
-				try
-				{
-					auto result = m_handle.promise().get();
-					m_handle.destroy();
-					m_handle = nullptr;
-					return result;
-				}
-				catch (...)
-				{
-					m_handle.destroy();
-					m_handle = nullptr;
-					throw;
-				}
+				throw std::runtime_error("Coroutine is invalid");
 			}
+
+			handle_guard guard{m_handle};
+
+			return m_handle.promise().blocking_get();
 		}
 
 		~task()
@@ -284,6 +307,19 @@ namespace pot::coroutines
 		using promise_type = lazy_task_promise_type_impl<T>;
 		using handle_type = std::coroutine_handle<promise_type>;
 		using value_type = T;
+
+		struct handle_guard
+		{
+			handle_type& h;
+			~handle_guard()
+			{
+				if (h)
+				{
+					h.destroy();
+					h = nullptr;
+				}
+			}
+		};
 
 		explicit lazy_task(handle_type handle) noexcept : m_handle(handle)
 		{
@@ -329,23 +365,11 @@ namespace pot::coroutines
 
 		T await_resume()
 		{
-			if constexpr (std::is_void_v<T>)
-			{
-				m_handle.promise().get();
-				m_handle.destroy();
-				m_handle = nullptr;
-				return;
-			}
-			else
-			{
-				auto result = m_handle.promise().get();
-				m_handle.destroy();
-				m_handle = nullptr;
-				return result;
-			}
+			handle_guard guard{m_handle};
+			return m_handle.promise().get();
 		}
 
-		auto get()
+		auto blocking_get()
 		{
 			if (!m_handle || m_handle.done())
 			{
@@ -354,38 +378,31 @@ namespace pot::coroutines
 
 			m_handle.resume();
 
-			if constexpr (std::is_void_v<T>)
+			handle_guard guard{m_handle};
+
+			return m_handle.promise().blocking_get();
+		}
+
+		template <typename ExecType = pot::executor>
+		auto get(ExecType* executor = nullptr)
+		{
+			if (!m_handle || m_handle.done())
 			{
-				try
-				{
-					m_handle.promise().get();
-				}
-				catch (...)
-				{
-					m_handle.destroy();
-					m_handle = nullptr;
-					throw;
-				}
-				m_handle.destroy();
-				m_handle = nullptr;
-				return;
+				throw std::runtime_error("Coroutine is invalid or already done");
 			}
-			else
+
+			if (executor)
 			{
-				try
-				{
-					auto result = m_handle.promise().get();
-					m_handle.destroy();
-					m_handle = nullptr;
-					return result;
-				}
-				catch (...)
-				{
-					m_handle.destroy();
-					m_handle = nullptr;
-					throw;
-				}
+				m_handle.promise().meta.steal = [executor]() {
+					return executor->try_steal();
+				};
 			}
+
+			m_handle.resume();
+
+			handle_guard guard{m_handle};
+
+			return m_handle.promise().get();
 		}
 
 		~lazy_task()

@@ -3,8 +3,12 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "pot/coroutines/task.h"
+#include "pot/utils/time_it.h"
+#include "pot/utils/platform.h"
+
 namespace pot
 {
 	class executor
@@ -66,6 +70,63 @@ namespace pot
 			return 1;
 		}
 
+		static void cpu_set()
+		{
+			unsigned int num_cores = std::thread::hardware_concurrency();
+
+			std::vector<std::pair<int, long long>> results;
+			results.reserve(num_cores);
+
+#ifdef POT_PLATFORM_LINUX
+			cpu_set_t original_cpuset;
+			CPU_ZERO(&original_cpuset);
+			pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &original_cpuset);
+#endif
+
+			for (unsigned int i = 0; i < num_cores; ++i)
+			{
+#ifdef POT_PLATFORM_LINUX
+				cpu_set_t cpuset;
+				CPU_ZERO(&cpuset);
+				CPU_SET(static_cast<size_t>(i), &cpuset);
+
+				if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0) 
+					continue;
+#endif
+
+				volatile double val = 0.0;
+				for (int k = 0; k < 100'000; ++k) val += 1.0;
+
+				auto duration = pot::utils::time_it<std::chrono::nanoseconds>(10, []{}, [] 
+				{
+					volatile double val = 1.0;
+					for (int k = 0; k < 100'000'000; ++k) val = (val + 1.5) * 0.5;
+				});
+
+				results.emplace_back(static_cast<int>(i), duration.count());
+			}
+
+#ifdef POT_PLATFORM_LINUX
+			pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &original_cpuset);
+#endif
+
+			std::sort(results.begin(), results.end(), [](const auto& a, const auto& b) 
+			{
+				return a.second > b.second; 
+			});
+
+			std::vector<int> sorted_cores;
+			sorted_cores.reserve(results.size());
+			for (const auto& res : results) 
+			{
+				sorted_cores.push_back(res.first);
+			}
+
+			pot::coroutines::details::task_meta::sorted_cpu_list = std::move(sorted_cores);
+		}
+
+		virtual bool try_steal() { return false; }
+
 	private:
 		template <bool Lazy, typename Func, typename... Args>
 
@@ -93,7 +154,6 @@ namespace pot
 				{
 					auto typed_handle = std::coroutine_handle<PromiseType>::from_address(h.address());
 					typed_handle.promise().meta.run_count.fetch_add(1, std::memory_order_relaxed);
-
 					exec->derived_execute([h]() mutable { h.resume(); }, &typed_handle.promise().meta);
 				}
 

@@ -56,6 +56,7 @@ set(POT_HEADERS
 
     include/${PROJECT_NAME}/algorithms/parfor.h
     include/${PROJECT_NAME}/algorithms/lfqueue.h
+    include/${PROJECT_NAME}/algorithms/lfdequeue.h
     include/${PROJECT_NAME}/algorithms/reduce.h
     include/${PROJECT_NAME}/algorithms/dot.h
     include/${PROJECT_NAME}/algorithms/parsections.h
