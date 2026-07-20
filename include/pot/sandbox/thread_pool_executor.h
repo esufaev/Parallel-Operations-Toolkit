@@ -1,8 +1,6 @@
 #pragma once
-
 #include <atomic>
 #include <deque>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -16,26 +14,25 @@
 #include "pot/executors/executor.h"
 #include "pot/utils/this_thread.h"
 #include "pot/algorithms/lfqueue.h"
-#include "pot/algorithms/lfdequeue.h"
+#include "pot/utils/cache_line.h"
 
 namespace pot
 {
-
 	struct work_queue
 	{
-		std::queue<std::function<void()>> tasks;
+		std::queue<pot::utils::function<void()>> tasks;
 		std::mutex mtx;
 	};
 
 	struct work_stack
 	{
-		std::stack<std::function<void()>> tasks;
+		std::stack<pot::utils::function<void()>> tasks;
 		std::mutex mtx;
 	};
 
 	struct work_deque
 	{
-		std::deque<std::function<void()>> tasks;
+		std::deque<pot::utils::function<void()>> tasks;
 		std::mutex mtx;
 	};
 
@@ -64,7 +61,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -106,7 +103,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = m_notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(m_queue.mtx);
@@ -169,7 +166,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -219,7 +216,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(ctx.queue.mtx);
@@ -282,7 +279,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -334,7 +331,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = my_ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(my_ctx.queue.mtx);
@@ -414,7 +411,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -465,7 +462,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = my_ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(my_ctx.queue.mtx);
@@ -534,7 +531,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -576,7 +573,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = m_notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(m_stack.mtx);
@@ -639,7 +636,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -689,7 +686,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(ctx.stack.mtx);
@@ -740,7 +737,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -793,7 +790,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = m_notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(m_deque.mtx);
@@ -857,7 +854,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -920,7 +917,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(ctx.deque.mtx);
@@ -954,7 +951,7 @@ namespace pot::executors
 	{
 		struct task_item
 		{
-			std::function<void()> func;
+			pot::utils::function<void()> func;
 			uint64_t priority;
 			uint64_t sequence;
 
@@ -964,7 +961,7 @@ namespace pot::executors
 				{
 					return sequence > other.sequence;
 				}
-				return priority > other.priority;
+				return priority < other.priority;
 			}
 		};
 
@@ -994,7 +991,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
@@ -1039,13 +1036,13 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = m_notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				{
 					std::lock_guard lock(m_queue.mtx);
 					if (!m_queue.tasks.empty())
 					{
-						task = std::move(m_queue.tasks.top().func);
+						task = std::move(const_cast<task_item&>(m_queue.tasks.top()).func);
 						m_queue.tasks.pop();
 					}
 				}
@@ -1073,8 +1070,10 @@ namespace pot::executors
 	{
 		struct thread_context
 		{
-			pot::algorithms::lfqueue<std::function<void()>> queue; 
+			pot::algorithms::lfqueue<pot::utils::function<void()>> queue; 
 			std::atomic<uint64_t> notifier{0};
+			
+			std::pmr::memory_resource* resource{std::pmr::get_default_resource()};
 		};
 
 	public:
@@ -1102,7 +1101,23 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void set_memory_resources(const std::vector<std::pmr::memory_resource*>& resources)
+		{
+			for (size_t i = 0; i < std::min(m_contexts.size(), resources.size()); ++i)
+			{
+				m_contexts[i]->resource = resources[i] ? resources[i] : std::pmr::get_default_resource();
+			}
+		}
+
+		void set_memory_resource(size_t thread_idx, std::pmr::memory_resource* res)
+		{
+			if (thread_idx < m_contexts.size())
+			{
+				m_contexts[thread_idx]->resource = res ? res : std::pmr::get_default_resource();
+			}
+		}
+
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 			{
@@ -1112,8 +1127,9 @@ namespace pot::executors
 			size_t idx = m_next_thread_idx.fetch_add(1, std::memory_order_relaxed) % m_threads.size();
 			auto &ctx = *m_contexts[idx];
 
-			std::function<void()> f = std::move(func);
-			while (!ctx.queue.push(f))
+			pot::utils::function<void()> f(std::allocator_arg, ctx.resource, std::move(func));
+			
+			while (!ctx.queue.push(std::move(f)))
 			{
 				std::this_thread::yield();
 			}
@@ -1174,7 +1190,8 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = my_ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				
+				pot::utils::function<void()> task(std::allocator_arg, my_ctx.resource, nullptr);
 
 				if (auto local_task = my_ctx.queue.pop())
 				{
@@ -1238,15 +1255,14 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 			{
 				throw std::runtime_error("Executor " + m_name + " is stopped.");
 			}
 
-			
-			std::function<void()> f = std::move(func);
+			pot::utils::function<void()> f = std::move(func);
 			while (!m_queue.push(f))
 			{
 				std::this_thread::yield();
@@ -1289,7 +1305,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = m_notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				if (auto local_task = m_queue.pop())
 				{
@@ -1312,7 +1328,7 @@ namespace pot::executors
 		}
 
 		std::vector<std::jthread> m_threads;
-		pot::algorithms::lfqueue<std::function<void()>> m_queue;
+		pot::algorithms::lfqueue<pot::utils::function<void()>> m_queue;
 		std::atomic<uint64_t> m_notifier{0};
 		std::atomic<bool> m_stop{false};
 	};
@@ -1321,7 +1337,7 @@ namespace pot::executors
 	{
 		struct thread_context
 		{
-			pot::algorithms::lfqueue<std::function<void()>> queue;
+			pot::algorithms::lfqueue<pot::utils::function<void()>> queue;
 			std::atomic<uint64_t> notifier{0};
 		};
 
@@ -1350,7 +1366,7 @@ namespace pot::executors
 			shutdown();
 		}
 
-		void derived_execute(std::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
 		{
 			if (m_stop.load(std::memory_order_acquire))
 			{
@@ -1360,7 +1376,7 @@ namespace pot::executors
 			size_t idx = m_next_thread_idx.fetch_add(1, std::memory_order_relaxed) % m_threads.size();
 			auto &ctx = *m_contexts[idx];
 
-			std::function<void()> f = std::move(func);
+			pot::utils::function<void()> f = std::move(func);
 			while (!ctx.queue.push(f))
 			{
 				std::this_thread::yield();
@@ -1408,7 +1424,7 @@ namespace pot::executors
 			while (!st.stop_requested())
 			{
 				uint64_t wait_val = ctx.notifier.load(std::memory_order_acquire);
-				std::function<void()> task;
+				pot::utils::function<void()> task;
 
 				
 				if (auto local_task = ctx.queue.pop())
@@ -1436,4 +1452,217 @@ namespace pot::executors
 		std::atomic<size_t> m_next_thread_idx{0};
 		std::atomic<bool> m_stop{false};
 	};
-} 
+
+	class thread_pool_executor_lqlf_steal_seq_batch final : public executor
+	{
+		alignas(pot::cache_line_alignment) struct thread_context
+		{
+			pot::algorithms::lfqueue<pot::utils::function<void()>> queue; 
+			std::atomic<int64_t> task_count{0}; // <-- ДОБАВЛЕНО: Аппроксимация размера очереди
+			std::atomic<uint64_t> notifier{0};
+			
+			std::pmr::memory_resource* resource{std::pmr::get_default_resource()};
+		};
+
+	public:
+		thread_pool_executor_lqlf_steal_seq_batch(std::string name,
+												  size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency()))
+			: executor(std::move(name))
+		{
+			m_contexts.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				m_contexts.push_back(std::make_unique<thread_context>());
+			}
+
+			m_threads.reserve(num_threads);
+			for (size_t i = 0; i < num_threads; ++i)
+			{
+				std::string worker_name = m_name + "-W" + std::to_string(i);
+				m_threads.emplace_back([this, worker_name = std::move(worker_name), i](std::stop_token st)
+									   { worker_loop(std::move(st), std::move(worker_name), i); });
+			}
+		}
+
+		~thread_pool_executor_lqlf_steal_seq_batch() override
+		{
+			shutdown();
+		}
+
+		void set_memory_resources(const std::vector<std::pmr::memory_resource*>& resources)
+		{
+			for (size_t i = 0; i < std::min(m_contexts.size(), resources.size()); ++i)
+			{
+				m_contexts[i]->resource = resources[i] ? resources[i] : std::pmr::get_default_resource();
+			}
+		}
+
+		void set_memory_resource(size_t thread_idx, std::pmr::memory_resource* res)
+		{
+			if (thread_idx < m_contexts.size())
+			{
+				m_contexts[thread_idx]->resource = res ? res : std::pmr::get_default_resource();
+			}
+		}
+
+		void derived_execute(pot::utils::function<void()> &&func, pot::coroutines::details::task_meta *meta = nullptr) override
+		{
+			if (m_stop.load(std::memory_order_acquire))
+			{
+				throw std::runtime_error("Executor " + m_name + " is stopped.");
+			}
+
+			size_t idx = m_next_thread_idx.fetch_add(1, std::memory_order_relaxed) % m_threads.size();
+			auto &ctx = *m_contexts[idx];
+
+			pot::utils::function<void()> f(std::allocator_arg, ctx.resource, std::move(func));
+			
+			while (!ctx.queue.push(std::move(f)))
+			{
+				std::this_thread::yield();
+			}
+
+			// Увеличиваем аппроксимированный размер очереди
+			ctx.task_count.fetch_add(1, std::memory_order_relaxed);
+
+			ctx.notifier.fetch_add(1, std::memory_order_release);
+			ctx.notifier.notify_one();
+		}
+
+		bool try_steal() override
+		{
+			for (auto &iter_ctx : m_contexts)
+			{
+				if (auto stolen_task = iter_ctx->queue.pop())
+				{
+					iter_ctx->task_count.fetch_sub(1, std::memory_order_relaxed);
+					(*stolen_task)(); 
+					return true;      
+				}
+			}
+			return false; 
+		}
+
+		void shutdown() override
+		{
+			bool expected = false;
+			if (!m_stop.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+			{
+				return;
+			}
+
+			for (auto &thread : m_threads)
+			{
+				thread.request_stop();
+			}
+
+			for (auto &ctx : m_contexts)
+			{
+				ctx->notifier.fetch_add(1, std::memory_order_release);
+				ctx->notifier.notify_all();
+			}
+
+			m_threads.clear();
+		}
+
+		[[nodiscard]] size_t thread_count() const override
+		{
+			return m_threads.size();
+		}
+
+	private:
+		void worker_loop(std::stop_token st, std::string name, int64_t local_id)
+		{
+			pot::this_thread::init_thread_variables(local_id, this);
+			pot::this_thread::set_name(name);
+
+			auto &my_ctx = *m_contexts[local_id];
+			size_t num_queues = m_contexts.size();
+
+			constexpr size_t MAX_BATCH_SIZE = 64; 
+			
+			std::vector<pot::utils::function<void()>> local_batch;
+			local_batch.reserve(MAX_BATCH_SIZE);
+
+			while (!st.stop_requested())
+			{
+				uint64_t wait_val = my_ctx.notifier.load(std::memory_order_acquire);
+				
+				pot::utils::function<void()> task(std::allocator_arg, my_ctx.resource, nullptr);
+
+				if (!local_batch.empty())
+				{
+					task = std::move(local_batch.back());
+					local_batch.pop_back();
+				}
+				else if (auto local_task = my_ctx.queue.pop())
+				{
+					my_ctx.task_count.fetch_sub(1, std::memory_order_relaxed);
+					task = std::move(*local_task);
+				}
+				
+				if (!task && num_queues > 1)
+				{
+					for (size_t i = 1; i < num_queues; ++i)
+					{
+						size_t target_idx = (local_id + i) % num_queues;
+						auto &target_ctx = *m_contexts[target_idx];
+						
+						// Быстрая проверка: есть ли вообще смысл пытаться воровать?
+						int64_t approx_size = target_ctx.task_count.load(std::memory_order_relaxed);
+						if (approx_size <= 0) continue; 
+
+						// --- ДИНАМИЧЕСКИЙ БАТЧ ---
+						// Воруем ровно ПОЛОВИНУ задач из очереди жертвы, но не менее 1 и не более MAX_BATCH_SIZE
+						size_t to_steal = static_cast<size_t>(approx_size / 5);
+						if (to_steal == 0) to_steal = 1;
+						if (to_steal > MAX_BATCH_SIZE) to_steal = MAX_BATCH_SIZE;
+
+						size_t stolen_count = 0;
+
+						if (auto stolen_task = target_ctx.queue.pop())
+						{
+							task = std::move(*stolen_task);
+							stolen_count++;
+							
+							for (size_t b = 1; b < to_steal; ++b)
+							{
+								if (auto extra_task = target_ctx.queue.pop())
+								{
+									local_batch.push_back(std::move(*extra_task));
+									stolen_count++;
+								}
+								else
+								{
+									break; 
+								}
+							}
+							
+							// Микро-оптимизация: списываем весь украденный батч за одну атомарную операцию
+							target_ctx.task_count.fetch_sub(stolen_count, std::memory_order_relaxed);
+							break; 
+						}
+					}
+				}
+				
+				if (task)
+				{
+					task();
+				}
+				else
+				{
+					if (st.stop_requested())
+					{
+						return;
+					}
+					my_ctx.notifier.wait(wait_val, std::memory_order_acquire);
+				}
+			}
+		}
+
+		std::vector<std::jthread> m_threads;
+		std::vector<std::unique_ptr<thread_context>> m_contexts;
+		std::atomic<size_t> m_next_thread_idx{0};
+		std::atomic<bool> m_stop{false};
+	};
+}

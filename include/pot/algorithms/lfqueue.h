@@ -3,10 +3,20 @@
 #include <atomic>
 #include <optional>
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+#include <immintrin.h>
+#define POT_YIELD_PROCESSOR() _mm_pause()
+#else
+#include <thread>
+#define POT_YIELD_PROCESSOR() std::this_thread::yield()
+#endif
+
+#include "pot/utils/cache_line.h"
+
 namespace pot::algorithms
 {
 
-const size_t MPSC_QUEUE_CAPACITY = 1024; // temp
+const size_t MPSC_QUEUE_CAPACITY = 65536;
 
 template <typename T> class lfqueue
 {
@@ -18,7 +28,7 @@ template <typename T> class lfqueue
     [[nodiscard]] bool push(const T &msg) noexcept;
 
   private:
-    struct cell_t
+    struct alignas(pot::cache_line_alignment) cell_t
     {
         std::atomic<size_t> sequence;
         T data;
@@ -29,14 +39,13 @@ template <typename T> class lfqueue
 
     cell_t *buffer;
 
-    alignas(64) std::atomic<size_t> enqueuePos{0};
-    alignas(64) std::atomic<size_t> dequeuePos{0};
+    alignas(pot::cache_line_alignment) std::atomic<size_t> enqueuePos{0};
+    alignas(pot::cache_line_alignment) std::atomic<size_t> dequeuePos{0};
 };
 
 template <typename T> lfqueue<T>::lfqueue()
 {
-    static_assert((capacity > 0 && ((capacity & (capacity - 1)) == 0)),
-                  "Capacity must be a power of 2");
+    static_assert((capacity > 0 && ((capacity & (capacity - 1)) == 0)), "Capacity must be a power of 2");
 
     buffer = new cell_t[capacity];
 
@@ -46,7 +55,10 @@ template <typename T> lfqueue<T>::lfqueue()
     }
 }
 
-template <typename T> lfqueue<T>::~lfqueue() { delete[] buffer; }
+template <typename T> lfqueue<T>::~lfqueue()
+{
+    delete[] buffer;
+}
 
 template <typename T> bool lfqueue<T>::push(const T &msg) noexcept
 {
@@ -59,23 +71,26 @@ template <typename T> bool lfqueue<T>::push(const T &msg) noexcept
         size_t seq = cell->sequence.load(std::memory_order_acquire);
         intptr_t dif = (intptr_t)seq - (intptr_t)pos;
 
-        if (dif == 0)
+        if (dif == 0) [[likely]]
         {
             if (enqueuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
             {
                 cell->data = msg;
-
                 cell->sequence.store(pos + 1, std::memory_order_release);
                 return true;
             }
+
+            POT_YIELD_PROCESSOR();
         }
-        else if (dif < 0)
+        else if (dif < 0) [[unlikely]]
         {
             return false;
         }
         else
         {
             pos = enqueuePos.load(std::memory_order_relaxed);
+
+            POT_YIELD_PROCESSOR();
         }
     }
 }
@@ -89,27 +104,28 @@ template <typename T> std::optional<T> lfqueue<T>::pop() noexcept
     {
         cell = &buffer[pos & mask];
         size_t seq = cell->sequence.load(std::memory_order_acquire);
-
         intptr_t dif = (intptr_t)seq - (intptr_t)(pos + 1);
 
-        if (dif == 0)
+        if (dif == 0) [[likely]]
         {
             if (dequeuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
             {
                 auto result = std::move(cell->data);
-
                 cell->sequence.store(pos + mask + 1, std::memory_order_release);
-
                 return std::make_optional(std::move(result));
             }
+
+            POT_YIELD_PROCESSOR();
         }
-        else if (dif < 0)
+        else if (dif < 0) [[unlikely]]
         {
             return std::nullopt;
         }
         else
         {
             pos = dequeuePos.load(std::memory_order_relaxed);
+
+            POT_YIELD_PROCESSOR();
         }
     }
 }

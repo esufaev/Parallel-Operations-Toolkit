@@ -131,6 +131,34 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(pot PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
+include(FetchContent)
+
+FetchContent_Declare(
+    uring
+    GIT_REPOSITORY https://github.com/axboe/liburing.git
+    GIT_TAG        master)
+
+FetchContent_GetProperties(uring)
+if(NOT uring_POPULATED)
+    FetchContent_Populate(uring)
+endif()
+
+add_custom_command(
+    OUTPUT ${uring_SOURCE_DIR}/src/liburing.a
+    COMMAND make -j
+    WORKING_DIRECTORY ${uring_SOURCE_DIR}
+    COMMENT "Building liburing"
+)
+
+add_custom_target(uring_build ALL DEPENDS ${uring_SOURCE_DIR}/src/liburing.a)
+
+add_library(uring::uring STATIC IMPORTED GLOBAL)
+add_dependencies(uring::uring uring_build)
+set_target_properties(uring::uring PROPERTIES
+    IMPORTED_LOCATION ${uring_SOURCE_DIR}/src/liburing.a
+    INTERFACE_INCLUDE_DIRECTORIES ${uring_SOURCE_DIR}/src/include
+)
+
 # Testing
 if(POT_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     enable_testing()

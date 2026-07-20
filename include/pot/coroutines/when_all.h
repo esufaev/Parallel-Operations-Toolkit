@@ -74,7 +74,7 @@ pot::coroutines::task<void> when_all(Container<FuturePtr, OtherTypes...> &future
  *
  * @return task<void> A coroutine that completes once all provided tasks finish.
  */
-template <typename... Futures> pot::coroutines::task<void> when_all(Futures &&...futures)
+template <typename... Futures> pot::coroutines::task<void> when_all(POT_CORO_ELIDABLE_ARG Futures &&...futures)
 {
     (co_await std::forward<Futures>(futures), ...);
     co_return;

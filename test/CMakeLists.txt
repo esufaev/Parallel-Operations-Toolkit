@@ -16,7 +16,8 @@ set(TEST_SOURCES
   # test_mandelbrot.cpp
   # test_disb.cpp
   # test_meta.cpp
-  test_thread_pools_bench.cpp
+  # test_thread_pools_bench.cpp
+  test_io.cpp
 )
 
 find_package(Eigen3 REQUIRED)
@@ -27,6 +28,7 @@ target_link_libraries(tests PRIVATE Eigen3::Eigen)
 target_link_libraries(tests PRIVATE pot concurrencpp::concurrencpp)
 target_link_libraries(tests PRIVATE pot fmt::fmt)
 target_link_libraries(tests PRIVATE pot OpenMP::OpenMP_CXX)
+target_link_libraries(tests PRIVATE pot uring::uring)
 
 # apply_warning_flags_to_targets(tests) # Apply warning flags
 set_target_properties(
